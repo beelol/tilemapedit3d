@@ -1,6 +1,7 @@
 use crate::types::{TILE_HEIGHT, TILE_SIZE, TileKind, TileMap};
 use bevy::prelude::*;
 use bevy::render::mesh::Indices;
+use bevy::render::render_asset::RenderAssetUsages;
 
 enum Direction {
     North,
@@ -16,7 +17,10 @@ const CORNER_SE: usize = 3;
 
 pub fn build_map_mesh(map: &TileMap) -> Mesh {
     if map.width == 0 || map.height == 0 {
-        return Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
+        return Mesh::new(
+            bevy::render::render_resource::PrimitiveTopology::TriangleList,
+            RenderAssetUsages::default(),
+        );
     }
 
     // Cache corner heights for every tile so we can stitch seams reliably.
@@ -167,7 +171,10 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
         }
     }
 
-    let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
+    let mut mesh = Mesh::new(
+        bevy::render::render_resource::PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);

@@ -1,6 +1,7 @@
 use crate::terrain;
 use crate::types::*;
 use bevy::prelude::*;
+use bevy::render::render_asset::RenderAssetUsages;
 use bevy_egui::EguiContexts;
 
 pub struct EditorPlugin;
@@ -70,6 +71,7 @@ fn spawn_editor_assets(
 
     let terrain_mesh = meshes.add(Mesh::new(
         bevy::render::render_resource::PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
     ));
 
     commands.spawn(PbrBundle {
