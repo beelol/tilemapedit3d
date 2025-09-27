@@ -1,0 +1,28 @@
+use bincode::{config, encode_to_vec, decode_from_slice};
+use serde::{Serialize, Deserialize};
+use crate::types::TileMap;
+
+const KEY: u8 = 0xAA;
+
+fn obfuscate(data: &mut [u8]) {
+    for b in data.iter_mut() {
+        *b ^= KEY;
+    }
+}
+
+pub fn save_map(path: &str, map: &TileMap) -> anyhow::Result<()> {
+    // pick a config (matches old bincode defaults)
+    let cfg = config::standard();
+    let mut bytes = encode_to_vec(map, cfg)?;
+    obfuscate(&mut bytes);
+    std::fs::write(path, bytes)?;
+    Ok(())
+}
+
+pub fn load_map(path: &str) -> anyhow::Result<TileMap> {
+    let mut bytes = std::fs::read(path)?;
+    obfuscate(&mut bytes);
+    let cfg = config::standard();
+    let (map, _len): (TileMap, usize) = decode_from_slice(&bytes, cfg)?;
+    Ok(map)
+}
