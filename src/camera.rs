@@ -2,7 +2,9 @@ use bevy::prelude::*;
 
 pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
-    fn build(&self, app: &mut App) { app.add_systems(Startup, spawn_camera); }
+    fn build(&self, app: &mut App) {
+        app.add_systems(Startup, spawn_camera);
+    }
 }
 
 // spawn a camera looking down on the XZ plane
@@ -12,14 +14,14 @@ fn spawn_camera(mut commands: Commands) {
     transform.rotation = Quat::from_rotation_y(45_f32.to_radians())
         * Quat::from_rotation_x(-35.264_f32.to_radians());
 
-
     commands.spawn(Camera3dBundle {
         transform,
         projection: Projection::Orthographic(OrthographicProjection {
-            scale: 0.03, // tweak zoom
+            scale: 0.03,
+            near: -500.0,
+            far: 500.0,
             ..default()
         }),
         ..default()
     });
-
 }

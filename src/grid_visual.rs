@@ -1,45 +1,31 @@
 use bevy::prelude::*;
 
-const GRID_SIZE: i32 = 20;     // how many cells across
-const CELL_SIZE: f32 = 32.0;   // world units per cell
+use crate::{editor::EditorState, types::TILE_SIZE};
 
-pub fn draw_grid(
-    mut gizmos: Gizmos,
-    windows: Query<&Window>,
-    camera_q: Query<(&Camera, &GlobalTransform)>,
-) {
-    let half = GRID_SIZE as f32 * CELL_SIZE * 0.5;
+const GRID_COLOR: Color = Color::srgb(0.85, 0.85, 0.85);
 
-    // --- Draw white grid lines ---
-    for i in -GRID_SIZE..=GRID_SIZE {
-        let x = i as f32 * CELL_SIZE;
-        let z = i as f32 * CELL_SIZE;
-        
-        // Horizontal lines (along X axis)
-        gizmos.line(Vec3::new(-half, 0.0, z), Vec3::new(half, 0.0, z), Color::WHITE);
+pub fn draw_grid(mut gizmos: Gizmos, state: Res<EditorState>) {
+    let radius_x = state.map.width as i32;
+    let radius_z = state.map.height as i32;
 
-        // Vertical lines (along Z axis)
-        gizmos.line(Vec3::new(x, 0.0, -half), Vec3::new(x, 0.0, half), Color::WHITE);
+    let cell = TILE_SIZE;
+    let half_step = cell * 0.5;
+
+    for x in -radius_x..=radius_x {
+        let position = x as f32 * cell;
+        gizmos.line(
+            Vec3::new(position, 0.0, -radius_z as f32 * cell - half_step),
+            Vec3::new(position, 0.0, radius_z as f32 * cell + half_step),
+            GRID_COLOR,
+        );
     }
 
-    // --- Hover highlight ---
-    let window = windows.single();
-    if let Some(cursor) = window.cursor_position() {
-        let (camera, cam_transform) = camera_q.single();
-
-        if let Some(world_pos) = camera.viewport_to_world_2d(cam_transform, cursor) {
-            // snap to grid cell
-            let cell_x = (world_pos.x / CELL_SIZE).floor();
-            let cell_y = (world_pos.y / CELL_SIZE).floor();
-
-            let min = Vec2::new(cell_x * CELL_SIZE, cell_y * CELL_SIZE);
-            let max = min + Vec2::splat(CELL_SIZE);
-
-            // draw green outline
-            gizmos.line_2d(min, Vec2::new(max.x, min.y), Color::linear_rgba(0., 100., 0., 0.)); // bottom
-            gizmos.line_2d(min, Vec2::new(min.x, max.y), Color::linear_rgba(0., 100., 0., 0.)); // left
-            gizmos.line_2d(max, Vec2::new(min.x, max.y), Color::linear_rgba(0., 100., 0., 0.)); // top
-            gizmos.line_2d(max, Vec2::new(max.x, min.y), Color::linear_rgba(0., 100., 0., 0.)); // right
-        }
+    for z in -radius_z..=radius_z {
+        let position = z as f32 * cell;
+        gizmos.line(
+            Vec3::new(-radius_x as f32 * cell - half_step, 0.0, position),
+            Vec3::new(radius_x as f32 * cell + half_step, 0.0, position),
+            GRID_COLOR,
+        );
     }
 }
