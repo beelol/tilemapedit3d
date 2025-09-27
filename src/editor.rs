@@ -41,12 +41,6 @@ impl Default for EditorState {
     }
 }
 
-// Simple green overlay material
-#[derive(Resource)]
-struct Materials {
-    hover: Handle<StandardMaterial>,
-}
-
 #[derive(Resource)]
 struct TerrainVisual {
     mesh: Handle<Mesh>,
@@ -58,11 +52,6 @@ fn spawn_editor_assets(
     mut meshes: ResMut<Assets<Mesh>>,
     asset_server: Res<AssetServer>,
 ) {
-    let hover = mats.add(StandardMaterial {
-        base_color: Color::rgba(0.0, 1.0, 0.0, 0.25),
-        unlit: true,
-        ..default()
-    });
     let terrain_material = mats.add(StandardMaterial {
         base_color: Color::rgb(0.35, 0.55, 0.2),
         perceptual_roughness: 0.8,
@@ -90,7 +79,6 @@ fn spawn_editor_assets(
         ..default()
     });
 
-    commands.insert_resource(Materials { hover });
     commands.insert_resource(TerrainVisual { mesh: terrain_mesh });
 }
 
@@ -178,42 +166,23 @@ fn rebuild_terrain_mesh(
     }
 }
 
-// Draw a thin quad on hovered tile at its elevation
-#[derive(Component)]
-struct HoverMarker;
-
-fn draw_hover_highlight(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mats: Res<Materials>,
-    state: Res<EditorState>,
-    existing: Query<Entity, With<HoverMarker>>,
-) {
-    // clear previous
-    for e in &existing {
-        commands.entity(e).despawn();
-    }
-
+fn draw_hover_highlight(mut gizmos: Gizmos, state: Res<EditorState>) {
     if let Some((x, y)) = state.hover {
-        let min = Vec3::new(
-            x as f32 * TILE_SIZE,
-            state.current_elev as f32 * TILE_HEIGHT + 0.01,
-            y as f32 * TILE_SIZE,
+        let heights = terrain::tile_corner_heights(&state.map, x, y);
+        let offset = 0.02;
+        let x0 = x as f32 * TILE_SIZE;
+        let x1 = x0 + TILE_SIZE;
+        let z0 = y as f32 * TILE_SIZE;
+        let z1 = z0 + TILE_SIZE;
+        gizmos.linestrip(
+            [
+                Vec3::new(x0, heights[terrain::CORNER_NW] + offset, z0),
+                Vec3::new(x1, heights[terrain::CORNER_NE] + offset, z0),
+                Vec3::new(x1, heights[terrain::CORNER_SE] + offset, z1),
+                Vec3::new(x0, heights[terrain::CORNER_SW] + offset, z1),
+                Vec3::new(x0, heights[terrain::CORNER_NW] + offset, z0),
+            ],
+            Color::srgb(0.0, 1.0, 0.0),
         );
-        let size = Vec2::splat(TILE_SIZE);
-        let mesh = Mesh::from(Rectangle::new(size.x, size.y));
-        commands.spawn((
-            PbrBundle {
-                mesh: meshes.add(mesh),
-                material: mats.hover.clone(),
-                transform: Transform::from_translation(
-                    min + Vec3::new(TILE_SIZE * 0.5, 0.0, TILE_SIZE * 0.5),
-                ) * Transform::from_rotation(Quat::from_rotation_x(
-                    -std::f32::consts::FRAC_PI_2,
-                )),
-                ..default()
-            },
-            HoverMarker,
-        ));
     }
 }
