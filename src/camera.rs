@@ -14,14 +14,14 @@ fn spawn_camera(mut commands: Commands) {
     transform.rotation = Quat::from_rotation_y(45_f32.to_radians())
         * Quat::from_rotation_x(-35.264_f32.to_radians());
 
-    commands.spawn(Camera3dBundle {
+    commands.spawn((Camera3dBundle {
         transform,
         projection: Projection::Orthographic(OrthographicProjection {
-            scale: 0.03,
+            scale: 0.4,
             near: -500.0,
             far: 500.0,
             ..default()
         }),
         ..default()
-    });
+    },));
 }
