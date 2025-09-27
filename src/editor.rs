@@ -56,6 +56,7 @@ fn spawn_editor_assets(
     mut commands: Commands,
     mut mats: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
+    asset_server: Res<AssetServer>,
 ) {
     let hover = mats.add(StandardMaterial {
         base_color: Color::rgba(0.0, 1.0, 0.0, 0.25),
@@ -73,6 +74,14 @@ fn spawn_editor_assets(
         bevy::render::render_resource::PrimitiveTopology::TriangleList,
         RenderAssetUsages::default(),
     ));
+
+    let terrain_material = mats.add(StandardMaterial {
+        base_color_texture: Some(asset_server.load("textures/terrain/rocky_terrain_02_diff_1k.png")),
+        normal_map_texture: Some(asset_server.load("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr")),
+        metallic: 0.0,
+        ..default()
+    });
+
 
     commands.spawn(PbrBundle {
         mesh: terrain_mesh.clone(),
