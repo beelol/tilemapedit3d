@@ -1,11 +1,11 @@
+mod camera;
 mod controls;
 mod editor;
+mod grid_visual;
 mod io;
+mod terrain;
 mod types;
 mod ui;
-mod camera;
-mod grid_visual;
-
 
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
@@ -20,13 +20,16 @@ fn main() {
         .add_plugins((CameraPlugin, ControlsPlugin, EditorPlugin, UiPlugin))
         .add_systems(Startup, setup_light)
         .add_systems(Update, grid_visual::draw_grid)
-
         .run();
 }
 
 fn setup_light(mut commands: Commands) {
     commands.spawn(DirectionalLightBundle {
-        directional_light: DirectionalLight { illuminance: 20_000.0, shadows_enabled: false, ..default() },
+        directional_light: DirectionalLight {
+            illuminance: 20_000.0,
+            shadows_enabled: false,
+            ..default()
+        },
         transform: Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -1.2, -0.8, 0.0)),
         ..default()
     });

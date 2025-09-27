@@ -16,7 +16,7 @@ fn spawn_camera(mut commands: Commands) {
     commands.spawn(Camera3dBundle {
         transform,
         projection: Projection::Orthographic(OrthographicProjection {
-            scale: 0.1, // tweak zoom
+            scale: 0.03, // tweak zoom
             ..default()
         }),
         ..default()
