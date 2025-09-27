@@ -4,6 +4,8 @@ mod io;
 mod types;
 mod ui;
 mod camera;
+mod grid_visual;
+
 
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
@@ -17,6 +19,8 @@ fn main() {
         .add_plugins((DefaultPlugins, EguiPlugin))
         .add_plugins((CameraPlugin, ControlsPlugin, EditorPlugin, UiPlugin))
         .add_systems(Startup, setup_light)
+        .add_systems(Update, grid_visual::draw_grid)
+
         .run();
 }
 
