@@ -10,7 +10,7 @@ impl Plugin for ControlsPlugin {
 }
 
 fn camera_move(
-    mut q_cam: Query<&mut Transform, With<Camera>>,
+    mut q_cam: Query<(&mut Transform, &mut Projection), With<Camera3d>>,
     keys: Res<ButtonInput<KeyCode>>,
     mut scroll: EventReader<MouseWheel>,
     mut egui: EguiContexts,
@@ -20,20 +20,41 @@ fn camera_move(
         return;
     }
 
-    let mut t: Mut<Transform> = q_cam.single_mut();
+    let (mut t, mut proj) = q_cam.single_mut();
+
+    // movement
     let f: f32 = 20.0 * time.delta_seconds();
 
-    let right: Dir3 = t.right();
-    let forward: Vec3 = (t.forward().xz().normalize_or_zero().extend(0.0));
+    // Convert to Vec3 so we can modify
+    let mut forward: Vec3 = t.forward().into();
+    let mut right: Vec3 = t.right().into();
 
-    if keys.pressed(KeyCode::KeyW) { t.translation += forward * f; }
-    if keys.pressed(KeyCode::KeyS) { t.translation -= forward * f; }
-    if keys.pressed(KeyCode::KeyA) { t.translation -= right.as_vec3() * f; }
-    if keys.pressed(KeyCode::KeyD) { t.translation += right.as_vec3() * f; }
+    // Flatten to XZ plane
+    forward.y = 0.0;
+    right.y = 0.0;
 
-    for ev in scroll.read() {
-        let forward = t.forward().as_vec3();
-        t.translation += forward * (ev.y * 0.5);
+    if keys.pressed(KeyCode::KeyW) {
+        t.translation += forward * f;
+    }
+    if keys.pressed(KeyCode::KeyS) {
+        t.translation -= forward * f;
+    }
+    if keys.pressed(KeyCode::KeyA) {
+        t.translation -= right * f;
+    }
+    if keys.pressed(KeyCode::KeyD) {
+        t.translation += right * f;
+    }
+
+    // zoom
+    if let Projection::Orthographic(ref mut ortho) = *proj {
+        const MIN_SCALE: f32 = 0.02;
+        const MAX_SCALE: f32 = 0.04;
+        const ZOOM_SENSITIVITY: f32 = 0.1;
+
+        for ev in scroll.read() {
+            let zoom_factor = (1.0 - ev.y * ZOOM_SENSITIVITY).clamp(0.5, 1.5);
+            ortho.scale = (ortho.scale * zoom_factor).clamp(MIN_SCALE, MAX_SCALE);
+        }
     }
 }
-
