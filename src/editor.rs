@@ -52,13 +52,6 @@ fn spawn_editor_assets(
     mut meshes: ResMut<Assets<Mesh>>,
     asset_server: Res<AssetServer>,
 ) {
-    let terrain_material = mats.add(StandardMaterial {
-        base_color: Color::rgb(0.35, 0.55, 0.2),
-        perceptual_roughness: 0.8,
-        metallic: 0.0,
-        ..default()
-    });
-
     let terrain_mesh = meshes.add(Mesh::new(
         bevy::render::render_resource::PrimitiveTopology::TriangleList,
         RenderAssetUsages::default(),

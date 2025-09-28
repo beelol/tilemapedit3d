@@ -31,10 +31,7 @@ fn ui_panel(mut egui_ctx: EguiContexts, mut state: ResMut<crate::editor::EditorS
                     if tile.kind == TileKind::Ramp {
                         tile.ramp_orientation = match tile.ramp_orientation {
                             None => Some(RampDirection::North),
-                            Some(RampDirection::North) => Some(RampDirection::East),
-                            Some(RampDirection::East) => Some(RampDirection::South),
-                            Some(RampDirection::South) => Some(RampDirection::West),
-                            Some(RampDirection::West) => None,
+                            Some(dir) => dir.next(),
                         };
                         state.map_dirty = true;
                     }
@@ -54,6 +51,7 @@ fn ui_panel(mut egui_ctx: EguiContexts, mut state: ResMut<crate::editor::EditorS
             if ui.button("Load").clicked() {
                 if let Ok(m) = load_map("map.json") {
                     state.map = m;
+                    state.map_dirty = true;
                 }
             }
         });

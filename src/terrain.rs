@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use bevy::render::mesh::Indices;
 use bevy::render::render_asset::RenderAssetUsages;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Direction {
     North,
     East,
