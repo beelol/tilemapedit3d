@@ -16,30 +16,30 @@ pub enum RampDirection {
 }
 
 impl RampDirection {
-  pub const ALL: [RampDirection; 4] = [
-      RampDirection::North,
-      RampDirection::East,
-      RampDirection::South,
-      RampDirection::West,
-  ];
+    pub const ALL: [RampDirection; 4] = [
+        RampDirection::North,
+        RampDirection::East,
+        RampDirection::South,
+        RampDirection::West,
+    ];
 
-  pub fn next(self) -> RampDirection {
-      match self {
-          RampDirection::North => RampDirection::East,
-          RampDirection::East => RampDirection::South,
-          RampDirection::South => RampDirection::West,
-          RampDirection::West => RampDirection::North,
-      }
-  }
-
-  pub fn offset(self) -> (i32, i32) {
-    match self {
-        RampDirection::North => (0, -1),
-        RampDirection::East => (1, 0),
-        RampDirection::South => (0, 1),
-        RampDirection::West => (-1, 0),
+    pub fn next(self) -> RampDirection {
+        match self {
+            RampDirection::North => RampDirection::East,
+            RampDirection::East => RampDirection::South,
+            RampDirection::South => RampDirection::West,
+            RampDirection::West => RampDirection::North,
+        }
     }
-  }
+
+    pub fn offset(self) -> (i32, i32) {
+        match self {
+            RampDirection::North => (0, -1),
+            RampDirection::East => (1, 0),
+            RampDirection::South => (0, 1),
+            RampDirection::West => (-1, 0),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, Encode, Decode, PartialEq, Eq, Hash)]
@@ -67,14 +67,6 @@ pub struct Tile {
     pub ramp_direction: Option<RampDirection>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Encode, Decode)]
-pub enum TileType {
-    Grass,
-    Dirt,
-    Cliff,
-    Water,
-}
-
 #[derive(Serialize, Deserialize, Debug, Encode, Decode)]
 pub struct TileMap {
     pub width: u32,
@@ -82,6 +74,7 @@ pub struct TileMap {
     pub tiles: Vec<Tile>, // row-major
 }
 
+impl TileMap {
     pub fn new(w: u32, h: u32) -> Self {
         Self {
             width: w,
@@ -113,4 +106,3 @@ pub struct TileMap {
 pub const TILE_SIZE: f32 = 1.0; // world units per tile
 pub const ELEVATION_FRACTION: f32 = 0.4; // fraction of tile width per elevation step
 pub const TILE_HEIGHT: f32 = TILE_SIZE * ELEVATION_FRACTION; // height per elevation step
-
