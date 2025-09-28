@@ -56,6 +56,13 @@ impl Default for TileType {
     }
 }
 
+pub const TERRAIN_LAYERS: [TileType; 4] = [
+    TileType::Grass,
+    TileType::Dirt,
+    TileType::Cliff,
+    TileType::Water,
+];
+
 #[derive(Debug, Serialize, Deserialize, Clone, Encode, Decode)]
 pub struct Tile {
     pub kind: TileKind,
