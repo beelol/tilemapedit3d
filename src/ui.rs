@@ -89,7 +89,7 @@ fn ui_panel(
             ui.separator();
             ui.collapsing("Textures", |ui| {
                 const COLUMNS: usize = 4;
-                let mut grid = egui::Grid::new("texture_palette_grid")
+                let grid = egui::Grid::new("texture_palette_grid")
                     .spacing([6.0, 6.0])
                     .num_columns(COLUMNS);
 
@@ -115,11 +115,9 @@ fn ui_panel(
                                 });
                             });
 
-                        let mut response = inner.response;
+                        let response = inner.response.on_hover_text(item.name.clone());
 
-                        let response2 = response.on_hover_text(item.name.clone());
-
-                        if response2.clicked() {
+                        if response.clicked() {
                             state.current_texture = item.tile_type;
                         }
 

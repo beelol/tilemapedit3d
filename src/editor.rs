@@ -2,11 +2,13 @@ use crate::terrain;
 use crate::texture::material::{TerrainBlendExtension, TerrainBlendParams, TerrainMaterial};
 use crate::texture::registry::TerrainTextureRegistry;
 use crate::types::*;
+use bevy::asset::{AssetEvent, AssetId};
 use bevy::prelude::*;
 use bevy::render::texture::{
     ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor,
 };
 use bevy_egui::EguiContexts;
+use std::collections::HashSet;
 
 pub struct EditorPlugin;
 impl Plugin for EditorPlugin {
@@ -448,9 +450,34 @@ fn rebuild_terrain_mesh(
 fn configure_terrain_samplers(
     textures: Res<TerrainTextureRegistry>,
     mut images: ResMut<Assets<Image>>,
+    mut events: EventReader<AssetEvent<Image>>,
+    mut configured: Local<HashSet<AssetId<Image>>>,
 ) {
+    let mut pending: Vec<AssetId<Image>> = events
+        .read()
+        .filter_map(|event| match event {
+            AssetEvent::LoadedWithDependencies { id } => Some(*id),
+            AssetEvent::Modified { id } => Some(*id),
+            _ => None,
+        })
+        .collect();
+
     for entry in textures.iter() {
-        if let Some(image) = images.get_mut(&entry.base_color) {
+        let id = entry.base_color.id();
+        if !configured.contains(&id) {
+            pending.push(id);
+        }
+    }
+
+    if pending.is_empty() {
+        return;
+    }
+
+    pending.sort();
+    pending.dedup();
+
+    for id in pending {
+        if let Some(image) = images.get_mut(id) {
             image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
                 address_mode_u: ImageAddressMode::Repeat,
                 address_mode_v: ImageAddressMode::Repeat,
@@ -460,6 +487,7 @@ fn configure_terrain_samplers(
                 mipmap_filter: ImageFilterMode::Linear,
                 ..Default::default()
             });
+            configured.insert(id);
         }
     }
 }

@@ -30,17 +30,17 @@ pub struct TerrainBlendParams {
 pub struct TerrainBlendExtension {
     #[uniform(100)]
     pub params: TerrainBlendParams,
-    #[texture(101, sampler = "splatmap_sampler")]
+    #[texture(101)]
     pub splatmap: Handle<Image>,
     #[sampler(102)]
     pub splatmap_sampler: ImageSampler,
-    #[texture(103, sampler = "layer_sampler")]
+    #[texture(103)]
     pub layer0: Handle<Image>,
-    #[texture(104, sampler = "layer_sampler")]
+    #[texture(104)]
     pub layer1: Handle<Image>,
-    #[texture(105, sampler = "layer_sampler")]
+    #[texture(105)]
     pub layer2: Handle<Image>,
-    #[texture(106, sampler = "layer_sampler")]
+    #[texture(106)]
     pub layer3: Handle<Image>,
     #[sampler(107)]
     pub layer_sampler: ImageSampler,
