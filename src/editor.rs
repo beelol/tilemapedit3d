@@ -1,7 +1,10 @@
 use crate::terrain;
+use crate::terrain_render::{TerrainMaterial, TerrainSplatExtension, TerrainSplatSettings};
 use crate::texture::registry::TerrainTextureRegistry;
 use crate::types::*;
 use bevy::prelude::*;
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
+use bevy::render::texture::ImageSampler;
 use bevy_egui::EguiContexts;
 
 pub struct EditorPlugin;
@@ -56,20 +59,11 @@ impl Default for EditorState {
 
 #[derive(Resource)]
 struct TerrainVisual {
-    layers: std::collections::HashMap<TileType, TerrainLayer>,
-}
-
-impl Default for TerrainVisual {
-    fn default() -> Self {
-        Self {
-            layers: std::collections::HashMap::new(),
-        }
-    }
-}
-
-struct TerrainLayer {
     mesh: Handle<Mesh>,
-    _entity: Entity,
+    material: Handle<TerrainMaterial>,
+    splatmap: Handle<Image>,
+    entity: Entity,
+    uv_scale: f32,
 }
 
 #[derive(Default, Reflect, GizmoConfigGroup)]
@@ -83,47 +77,133 @@ fn configure_hover_gizmos(mut configs: ResMut<GizmoConfigStore>) {
 
 fn spawn_editor_assets(
     mut commands: Commands,
-    mut mats: ResMut<Assets<StandardMaterial>>,
+    mut standard_materials: ResMut<Assets<StandardMaterial>>,
+    mut terrain_materials: ResMut<Assets<TerrainMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut images: ResMut<Assets<Image>>,
     asset_server: Res<AssetServer>,
     mut textures: ResMut<TerrainTextureRegistry>,
 ) {
+    let base_color_path = "textures/terrain/rocky_terrain_02_diff_1k.png";
+    let normal_path = Some("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr");
+
     textures.load_and_register(
         TileType::Grass,
         "Rocky Terrain",
         &asset_server,
-        &mut mats,
-        "textures/terrain/rocky_terrain_02_diff_1k.png",
-        Some("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
-        // Some("textures/terrain/rocky_terrain_02_rough_1k.exr"),
+        &mut standard_materials,
+        base_color_path,
+        normal_path,
         None,
-        // Some("textures/terrain/rocky_terrain_02_spec_1k.png"),
         None,
     );
 
-    let mut visual = TerrainVisual::default();
+    textures.load_and_register(
+        TileType::Dirt,
+        "Dirt",
+        &asset_server,
+        &mut standard_materials,
+        base_color_path,
+        normal_path,
+        None,
+        None,
+    );
 
-    for entry in textures.iter() {
-        let mesh = meshes.add(terrain::empty_mesh());
-        let entity = commands
-            .spawn(PbrBundle {
-                mesh: mesh.clone(),
-                material: entry.material.clone(),
-                transform: Transform::default(),
-                ..default()
-            })
-            .id();
+    textures.load_and_register(
+        TileType::Cliff,
+        "Cliff",
+        &asset_server,
+        &mut standard_materials,
+        base_color_path,
+        normal_path,
+        None,
+        None,
+    );
 
-        visual.layers.insert(
-            entry.tile_type,
-            TerrainLayer {
-                mesh,
-                _entity: entity,
+    textures.load_and_register(
+        TileType::Water,
+        "Water",
+        &asset_server,
+        &mut standard_materials,
+        base_color_path,
+        normal_path,
+        None,
+        None,
+    );
+
+    let fallback = textures
+        .iter()
+        .next()
+        .map(|entry| entry.icon.clone())
+        .unwrap_or_default();
+
+    let layer0 = textures
+        .diffuse_texture(TileType::Grass)
+        .unwrap_or_else(|| fallback.clone());
+    let layer1 = textures
+        .diffuse_texture(TileType::Dirt)
+        .unwrap_or_else(|| fallback.clone());
+    let layer2 = textures
+        .diffuse_texture(TileType::Cliff)
+        .unwrap_or_else(|| fallback.clone());
+    let layer3 = textures
+        .diffuse_texture(TileType::Water)
+        .unwrap_or(fallback);
+
+    let mut splatmap_image = Image::new_fill(
+        Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        &[255, 0, 0, 0],
+        TextureFormat::Rgba8Unorm,
+    );
+    splatmap_image.sampler = ImageSampler::linear();
+    splatmap_image.texture_descriptor.usage =
+        TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING;
+    let splatmap = images.add(splatmap_image);
+
+    let uv_scale = 4.0;
+    let material = terrain_materials.add(TerrainMaterial {
+        base: StandardMaterial {
+            base_color: Color::WHITE.into(),
+            base_color_texture: None,
+            normal_map_texture: None,
+            ..default()
+        },
+        extension: TerrainSplatExtension {
+            settings: TerrainSplatSettings {
+                map_size: Vec2::ONE,
+                uv_scale,
+                _padding: 0.0,
             },
-        );
-    }
+            splatmap: splatmap.clone(),
+            layer0,
+            layer1,
+            layer2,
+            layer3,
+        },
+    });
 
-    commands.insert_resource(visual);
+    let mesh = meshes.add(terrain::empty_mesh());
+    let entity = commands
+        .spawn(MaterialMeshBundle {
+            mesh: mesh.clone(),
+            material: material.clone(),
+            transform: Transform::default(),
+            ..default()
+        })
+        .id();
+
+    commands.insert_resource(TerrainVisual {
+        mesh,
+        material,
+        splatmap,
+        entity,
+        uv_scale,
+    });
 }
 
 // Raycast to ground plane at chosen elevation (use current_elev for edit layer)
@@ -316,6 +396,8 @@ fn ramp_targets(map: &TileMap, x: u32, y: u32, base: f32) -> Vec<RampDirection> 
 fn rebuild_terrain_mesh(
     mut state: ResMut<EditorState>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut images: ResMut<Assets<Image>>,
+    mut materials: ResMut<Assets<TerrainMaterial>>,
     visual: Res<TerrainVisual>,
 ) {
     if !state.map_dirty {
@@ -323,16 +405,22 @@ fn rebuild_terrain_mesh(
     }
     state.map_dirty = false;
 
-    let mesh_map = terrain::build_map_meshes(&state.map);
+    if let Some(result) = terrain::build_terrain_mesh(&state.map, visual.uv_scale) {
+        if let Some(existing) = meshes.get_mut(&visual.mesh) {
+            *existing = result.mesh;
+        } else {
+            meshes.insert(visual.mesh.clone(), result.mesh);
+        }
 
-    for (tile_type, layer) in &visual.layers {
-        let mesh = mesh_map
-            .get(tile_type)
-            .cloned()
-            .unwrap_or_else(terrain::empty_mesh);
+        if let Some(existing_image) = images.get_mut(&visual.splatmap) {
+            *existing_image = result.splatmap;
+        } else {
+            images.insert(visual.splatmap.clone(), result.splatmap);
+        }
 
-        if let Some(existing) = meshes.get_mut(&layer.mesh) {
-            *existing = mesh;
+        if let Some(material) = materials.get_mut(&visual.material) {
+            material.extension.settings.map_size = result.map_size;
+            material.extension.settings.uv_scale = visual.uv_scale;
         }
     }
 }

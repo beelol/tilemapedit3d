@@ -1,15 +1,22 @@
-use std::collections::HashMap;
-
 use crate::types::{RampDirection, TILE_HEIGHT, TILE_SIZE, TileKind, TileMap, TileType};
 use bevy::prelude::*;
 use bevy::render::mesh::Indices;
 use bevy::render::render_asset::RenderAssetUsages;
-use bevy::render::render_resource::PrimitiveTopology;
+use bevy::render::render_resource::{
+    PrimitiveTopology, TextureDimension, TextureFormat, TextureUsages,
+};
+use bevy::render::texture::{Image, ImageSampler};
 
 pub const CORNER_NW: usize = 0;
 pub const CORNER_NE: usize = 1;
 pub const CORNER_SW: usize = 2;
 pub const CORNER_SE: usize = 3;
+
+pub struct TerrainMeshResult {
+    pub mesh: Mesh,
+    pub splatmap: Image,
+    pub map_size: Vec2,
+}
 
 pub fn tile_corner_heights(map: &TileMap, x: u32, y: u32) -> [f32; 4] {
     let tile = map.get(x, y);
@@ -57,11 +64,9 @@ pub fn empty_mesh() -> Mesh {
     )
 }
 
-pub fn build_map_meshes(map: &TileMap) -> HashMap<TileType, Mesh> {
-    let mut result = HashMap::new();
-
+pub fn build_terrain_mesh(map: &TileMap, uv_scale: f32) -> Option<TerrainMeshResult> {
     if map.width == 0 || map.height == 0 {
-        return result;
+        return None;
     }
 
     let mut corner_cache = vec![[0.0f32; 4]; (map.width * map.height) as usize];
@@ -72,7 +77,8 @@ pub fn build_map_meshes(map: &TileMap) -> HashMap<TileType, Mesh> {
         }
     }
 
-    let mut buffers: HashMap<TileType, MeshBuffers> = HashMap::new();
+    let mut buffers = MeshBuffers::default();
+    let mut splatmap = vec![0u8; (map.width * map.height * 4) as usize];
 
     for y in 0..map.height {
         for x in 0..map.width {
@@ -84,17 +90,12 @@ pub fn build_map_meshes(map: &TileMap) -> HashMap<TileType, Mesh> {
             let z0 = y as f32 * TILE_SIZE;
             let z1 = z0 + TILE_SIZE;
 
-            let buffer = buffers.entry(tile.tile_type).or_default();
-
             let nw = Vec3::new(x0, corners[CORNER_NW], z0);
             let ne = Vec3::new(x1, corners[CORNER_NE], z0);
             let sw = Vec3::new(x0, corners[CORNER_SW], z1);
             let se = Vec3::new(x1, corners[CORNER_SE], z1);
 
-            buffer.push_quad(
-                [nw, sw, se, ne],
-                [[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]],
-            );
+            buffers.push_quad([nw, sw, se, ne], UvMode::Xz, uv_scale);
 
             let (bnw, bne) = if y > 0 {
                 let neighbor = corner_cache[map.idx(x, y - 1)];
@@ -102,12 +103,13 @@ pub fn build_map_meshes(map: &TileMap) -> HashMap<TileType, Mesh> {
             } else {
                 (0.0, 0.0)
             };
-            buffer.add_side_face(
+            buffers.add_side_face(
                 nw,
                 ne,
                 Vec3::new(x0, bnw.min(nw.y), z0),
                 Vec3::new(x1, bne.min(ne.y), z0),
                 RampDirection::North,
+                uv_scale,
             );
 
             let (bsw, bse) = if y + 1 < map.height {
@@ -116,12 +118,13 @@ pub fn build_map_meshes(map: &TileMap) -> HashMap<TileType, Mesh> {
             } else {
                 (0.0, 0.0)
             };
-            buffer.add_side_face(
+            buffers.add_side_face(
                 se,
                 sw,
                 Vec3::new(x1, bse.min(se.y), z1),
                 Vec3::new(x0, bsw.min(sw.y), z1),
                 RampDirection::South,
+                uv_scale,
             );
 
             let (bnw, bsw) = if x > 0 {
@@ -130,12 +133,13 @@ pub fn build_map_meshes(map: &TileMap) -> HashMap<TileType, Mesh> {
             } else {
                 (0.0, 0.0)
             };
-            buffer.add_side_face(
+            buffers.add_side_face(
                 sw,
                 nw,
                 Vec3::new(x0, bsw.min(sw.y), z1),
                 Vec3::new(x0, bnw.min(nw.y), z0),
                 RampDirection::West,
+                uv_scale,
             );
 
             let (bne, bse) = if x + 1 < map.width {
@@ -144,21 +148,43 @@ pub fn build_map_meshes(map: &TileMap) -> HashMap<TileType, Mesh> {
             } else {
                 (0.0, 0.0)
             };
-            buffer.add_side_face(
+            buffers.add_side_face(
                 ne,
                 se,
                 Vec3::new(x1, bne.min(ne.y), z0),
                 Vec3::new(x1, bse.min(se.y), z1),
                 RampDirection::East,
+                uv_scale,
             );
+
+            let pixel_index = ((y * map.width + x) * 4) as usize;
+            let channel = tile_type_channel(tile.tile_type);
+            splatmap[pixel_index + channel] = 255;
         }
     }
 
-    for (tile_type, buffer) in buffers {
-        result.insert(tile_type, buffer.into_mesh());
-    }
+    let mesh = buffers.into_mesh();
 
-    result
+    let mut image = Image::new(
+        Extent3d {
+            width: map.width,
+            height: map.height,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        splatmap,
+        TextureFormat::Rgba8Unorm,
+    );
+    image.sampler = ImageSampler::linear();
+    image.texture_descriptor.usage = TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING;
+
+    let map_size = Vec2::new(map.width as f32 * TILE_SIZE, map.height as f32 * TILE_SIZE);
+
+    Some(TerrainMeshResult {
+        mesh,
+        splatmap: image,
+        map_size,
+    })
 }
 
 fn find_ramp_target(map: &TileMap, x: u32, y: u32, base: f32) -> Option<(RampDirection, f32)> {
@@ -207,8 +233,41 @@ struct MeshBuffers {
     next_index: u32,
 }
 
+#[derive(Clone, Copy)]
+enum UvMode {
+    Xz,
+    Xy,
+    Zy,
+}
+
+fn tile_type_channel(tile_type: TileType) -> usize {
+    match tile_type {
+        TileType::Grass => 0,
+        TileType::Dirt => 1,
+        TileType::Cliff => 2,
+        TileType::Water => 3,
+    }
+}
+
+fn safe_scale(scale: f32) -> f32 {
+    if scale.abs() < f32::EPSILON {
+        1.0
+    } else {
+        scale
+    }
+}
+
+fn uv_from_mode(pos: Vec3, mode: UvMode, scale: f32) -> [f32; 2] {
+    let scale = safe_scale(scale);
+    match mode {
+        UvMode::Xz => [pos.x / scale, pos.z / scale],
+        UvMode::Xy => [pos.x / scale, pos.y / scale],
+        UvMode::Zy => [pos.z / scale, pos.y / scale],
+    }
+}
+
 impl MeshBuffers {
-    fn push_quad(&mut self, verts: [Vec3; 4], tex: [[f32; 2]; 4]) {
+    fn push_quad(&mut self, verts: [Vec3; 4], mode: UvMode, uv_scale: f32) {
         push_quad(
             &mut self.positions,
             &mut self.normals,
@@ -216,7 +275,8 @@ impl MeshBuffers {
             &mut self.indices,
             &mut self.next_index,
             verts,
-            tex,
+            mode,
+            uv_scale,
         );
     }
 
@@ -227,6 +287,7 @@ impl MeshBuffers {
         bottom_a: Vec3,
         bottom_b: Vec3,
         direction: RampDirection,
+        uv_scale: f32,
     ) {
         add_side_face(
             &mut self.positions,
@@ -239,6 +300,7 @@ impl MeshBuffers {
             bottom_a,
             bottom_b,
             direction,
+            uv_scale,
         );
     }
 
@@ -261,15 +323,14 @@ fn push_quad(
     indices: &mut Vec<u32>,
     next_index: &mut u32,
     verts: [Vec3; 4],
-    tex: [[f32; 2]; 4],
+    mode: UvMode,
+    uv_scale: f32,
 ) {
     push_triangle(
-        positions, normals, uvs, indices, next_index, verts[0], verts[1], verts[2], tex[0], tex[1],
-        tex[2],
+        positions, normals, uvs, indices, next_index, verts[0], verts[1], verts[2], mode, uv_scale,
     );
     push_triangle(
-        positions, normals, uvs, indices, next_index, verts[0], verts[2], verts[3], tex[0], tex[2],
-        tex[3],
+        positions, normals, uvs, indices, next_index, verts[0], verts[2], verts[3], mode, uv_scale,
     );
 }
 
@@ -282,9 +343,8 @@ fn push_triangle(
     a: Vec3,
     b: Vec3,
     c: Vec3,
-    ta: [f32; 2],
-    tb: [f32; 2],
-    tc: [f32; 2],
+    mode: UvMode,
+    uv_scale: f32,
 ) {
     let normal = (b - a).cross(c - a).normalize_or_zero();
     positions.push(a.to_array());
@@ -293,9 +353,9 @@ fn push_triangle(
     normals.push(normal.to_array());
     normals.push(normal.to_array());
     normals.push(normal.to_array());
-    uvs.push(ta);
-    uvs.push(tb);
-    uvs.push(tc);
+    uvs.push(uv_from_mode(a, mode, uv_scale));
+    uvs.push(uv_from_mode(b, mode, uv_scale));
+    uvs.push(uv_from_mode(c, mode, uv_scale));
     indices.extend_from_slice(&[*next_index, *next_index + 1, *next_index + 2]);
     *next_index += 3;
 }
@@ -311,30 +371,21 @@ fn add_side_face(
     bottom_a: Vec3,
     bottom_b: Vec3,
     direction: RampDirection,
+    uv_scale: f32,
 ) {
     const EPS: f32 = 1e-4;
     if (top_a.y - bottom_a.y).abs() < EPS && (top_b.y - bottom_b.y).abs() < EPS {
         return;
     }
 
-    let (verts, tex) = match direction {
-        RampDirection::North => (
-            [top_a, top_b, bottom_b, bottom_a],
-            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
-        ),
-        RampDirection::South => (
-            [top_a, top_b, bottom_b, bottom_a],
-            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
-        ),
-        RampDirection::West => (
-            [top_a, top_b, bottom_b, bottom_a],
-            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
-        ),
-        RampDirection::East => (
-            [top_a, top_b, bottom_b, bottom_a],
-            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
-        ),
+    let (verts, mode) = match direction {
+        RampDirection::North => ([top_a, top_b, bottom_b, bottom_a], UvMode::Xy),
+        RampDirection::South => ([top_a, top_b, bottom_b, bottom_a], UvMode::Xy),
+        RampDirection::West => ([top_a, top_b, bottom_b, bottom_a], UvMode::Zy),
+        RampDirection::East => ([top_a, top_b, bottom_b, bottom_a], UvMode::Zy),
     };
 
-    push_quad(positions, normals, uvs, indices, next_index, verts, tex);
+    push_quad(
+        positions, normals, uvs, indices, next_index, verts, mode, uv_scale,
+    );
 }
