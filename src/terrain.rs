@@ -1,14 +1,7 @@
-use crate::types::{TILE_HEIGHT, TILE_SIZE, TileKind, TileMap};
+use crate::types::{CardinalDirection, TILE_HEIGHT, TILE_SIZE, TileKind, TileMap};
 use bevy::prelude::*;
 use bevy::render::mesh::Indices;
 use bevy::render::render_asset::RenderAssetUsages;
-
-enum Direction {
-    North,
-    East,
-    South,
-    West,
-}
 
 pub const CORNER_NW: usize = 0;
 pub const CORNER_NE: usize = 1;
@@ -21,21 +14,21 @@ pub fn tile_corner_heights(map: &TileMap, x: u32, y: u32) -> [f32; 4] {
     let mut corners = [base; 4];
 
     if tile.kind == TileKind::Ramp {
-        if let Some((dir, neighbor_height)) = find_ramp_target(map, x, y, base) {
+        if let Some((dir, neighbor_height)) = ramp_target(map, x, y, base) {
             match dir {
-                Direction::North => {
+                CardinalDirection::North => {
                     corners[CORNER_NW] = neighbor_height;
                     corners[CORNER_NE] = neighbor_height;
                 }
-                Direction::South => {
+                CardinalDirection::South => {
                     corners[CORNER_SW] = neighbor_height;
                     corners[CORNER_SE] = neighbor_height;
                 }
-                Direction::West => {
+                CardinalDirection::West => {
                     corners[CORNER_NW] = neighbor_height;
                     corners[CORNER_SW] = neighbor_height;
                 }
-                Direction::East => {
+                CardinalDirection::East => {
                     corners[CORNER_NE] = neighbor_height;
                     corners[CORNER_SE] = neighbor_height;
                 }
@@ -110,7 +103,7 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
                 ne,
                 Vec3::new(x0, bnw.min(nw.y), z0),
                 Vec3::new(x1, bne.min(ne.y), z0),
-                Direction::North,
+                CardinalDirection::North,
             );
 
             // South edge (towards y+1)
@@ -130,7 +123,7 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
                 sw,
                 Vec3::new(x1, bse.min(se.y), z1),
                 Vec3::new(x0, bsw.min(sw.y), z1),
-                Direction::South,
+                CardinalDirection::South,
             );
 
             // West edge (towards x-1)
@@ -150,7 +143,7 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
                 nw,
                 Vec3::new(x0, bsw.min(sw.y), z1),
                 Vec3::new(x0, bnw.min(nw.y), z0),
-                Direction::West,
+                CardinalDirection::West,
             );
 
             // East edge (towards x+1)
@@ -170,7 +163,7 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
                 se,
                 Vec3::new(x1, bne.min(ne.y), z0),
                 Vec3::new(x1, bse.min(se.y), z1),
-                Direction::East,
+                CardinalDirection::East,
             );
         }
     }
@@ -186,33 +179,59 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
     mesh
 }
 
-fn find_ramp_target(map: &TileMap, x: u32, y: u32, base: f32) -> Option<(Direction, f32)> {
-    let mut result: Option<(Direction, f32)> = None;
-    let mut consider = |dir: Direction, nx: i32, ny: i32| {
-        if nx < 0 || ny < 0 {
-            return;
+fn ramp_target(map: &TileMap, x: u32, y: u32, base: f32) -> Option<(CardinalDirection, f32)> {
+    let tile = map.get(x, y);
+
+    if let Some(dir) = tile.ramp_orientation {
+        if let Some(height) = neighbor_height(map, x, y, dir) {
+            return Some((dir, height));
         }
-        let (ux, uy) = (nx as u32, ny as u32);
-        if ux >= map.width || uy >= map.height {
-            return;
-        }
-        let neighbor = map.get(ux, uy);
-        let h = neighbor.elevation as f32 * TILE_HEIGHT;
-        if h < base {
-            match &result {
-                Some((_, existing)) if *existing <= h => {}
-                _ => {
-                    result = Some((dir, h));
-                }
+    }
+
+    find_auto_ramp_target(map, x, y, base)
+}
+
+fn neighbor_height(map: &TileMap, x: u32, y: u32, direction: CardinalDirection) -> Option<f32> {
+    let (dx, dy) = direction.offset();
+    let nx = x as i32 + dx;
+    let ny = y as i32 + dy;
+    if nx < 0 || ny < 0 {
+        return None;
+    }
+    let ux = nx as u32;
+    let uy = ny as u32;
+    if ux >= map.width || uy >= map.height {
+        return None;
+    }
+
+    Some(map.get(ux, uy).elevation as f32 * TILE_HEIGHT)
+}
+
+fn find_auto_ramp_target(
+    map: &TileMap,
+    x: u32,
+    y: u32,
+    base: f32,
+) -> Option<(CardinalDirection, f32)> {
+    let mut result: Option<(CardinalDirection, f32)> = None;
+    let mut best_delta = f32::INFINITY;
+
+    for dir in CardinalDirection::ALL {
+        if let Some(height) = neighbor_height(map, x, y, dir) {
+            let delta = height - base;
+            if delta > 0.0 && delta < best_delta {
+                best_delta = delta;
+                result = Some((dir, height));
             }
         }
-    };
+    }
 
-    consider(Direction::North, x as i32, y as i32 - 1);
-    consider(Direction::South, x as i32, y as i32 + 1);
-    consider(Direction::West, x as i32 - 1, y as i32);
-    consider(Direction::East, x as i32 + 1, y as i32);
     result
+}
+
+pub fn auto_ramp_direction(map: &TileMap, x: u32, y: u32) -> Option<CardinalDirection> {
+    let base = map.get(x, y).elevation as f32 * TILE_HEIGHT;
+    find_auto_ramp_target(map, x, y, base).map(|(dir, _)| dir)
 }
 
 fn push_quad(
@@ -271,7 +290,7 @@ fn add_side_face(
     top_b: Vec3,
     bottom_a: Vec3,
     bottom_b: Vec3,
-    direction: Direction,
+    direction: CardinalDirection,
 ) {
     const EPS: f32 = 1e-4;
     if (top_a.y - bottom_a.y).abs() < EPS && (top_b.y - bottom_b.y).abs() < EPS {
@@ -279,19 +298,19 @@ fn add_side_face(
     }
 
     let (verts, tex) = match direction {
-        Direction::North => (
+        CardinalDirection::North => (
             [top_a, top_b, bottom_b, bottom_a],
             [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
         ),
-        Direction::South => (
+        CardinalDirection::South => (
             [top_a, top_b, bottom_b, bottom_a],
             [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
         ),
-        Direction::West => (
+        CardinalDirection::West => (
             [top_a, top_b, bottom_b, bottom_a],
             [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
         ),
-        Direction::East => (
+        CardinalDirection::East => (
             [top_a, top_b, bottom_b, bottom_a],
             [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
         ),

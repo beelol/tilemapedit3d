@@ -13,7 +13,7 @@ impl Plugin for EditorPlugin {
                 Update,
                 (
                     update_hover,
-                    paint_tiles,
+                    apply_editing_tools,
                     rebuild_terrain_mesh,
                     draw_hover_highlight,
                 ),
@@ -21,8 +21,21 @@ impl Plugin for EditorPlugin {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum EditorTool {
+    Paint,
+    Rotate,
+}
+
+impl Default for EditorTool {
+    fn default() -> Self {
+        EditorTool::Paint
+    }
+}
+
 #[derive(Resource)]
 pub struct EditorState {
+    pub current_tool: EditorTool,
     pub current_kind: TileKind,
     pub current_elev: i8, // -1..3
     pub hover: Option<(u32, u32)>,
@@ -32,6 +45,7 @@ pub struct EditorState {
 impl Default for EditorState {
     fn default() -> Self {
         Self {
+            current_tool: EditorTool::default(),
             current_kind: TileKind::Floor,
             current_elev: 0,
             hover: None,
@@ -65,12 +79,15 @@ fn spawn_editor_assets(
     ));
 
     let terrain_material = mats.add(StandardMaterial {
-        base_color_texture: Some(asset_server.load("textures/terrain/rocky_terrain_02_diff_1k.png")),
-        normal_map_texture: Some(asset_server.load("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr")),
+        base_color_texture: Some(
+            asset_server.load("textures/terrain/rocky_terrain_02_diff_1k.png"),
+        ),
+        normal_map_texture: Some(
+            asset_server.load("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
+        ),
         metallic: 0.0,
         ..default()
     });
-
 
     commands.spawn(PbrBundle {
         mesh: terrain_mesh.clone(),
@@ -137,37 +154,75 @@ fn update_hover(
     state.hover = None;
 }
 
-fn paint_tiles(
+fn apply_editing_tools(
     buttons: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
     mut state: ResMut<EditorState>,
     mut egui: EguiContexts,
 ) {
     if egui.ctx_mut().wants_pointer_input() {
         return;
     }
-    if buttons.pressed(MouseButton::Left) {
-        if let Some((x, y)) = state.hover {
-            let kind = state.current_kind;
-            let elevation = state.current_elev;
-            let state_ref = &mut *state;
-            let current = state_ref.map.get(x, y);
-            if current.kind != kind || current.elevation != elevation {
-                let tile_type = current.tile_type.clone();
-                state_ref.map.set(
-                    x,
-                    y,
-                    Tile {
-                        kind,
-                        elevation,
-                        tile_type,
-                        x,
-                        y,
-                    },
-                );
-                state_ref.map_dirty = true;
-            }
+    let wants_keyboard = egui.ctx_mut().wants_keyboard_input();
+
+    let Some((x, y)) = state.hover else {
+        return;
+    };
+
+    let should_rotate = buttons.just_pressed(MouseButton::Right)
+        || (!wants_keyboard && keys.just_pressed(KeyCode::KeyR))
+        || (state.current_tool == EditorTool::Rotate && buttons.just_pressed(MouseButton::Left));
+
+    if should_rotate {
+        if rotate_ramp_tile(&mut state.map, x, y) {
+            state.map_dirty = true;
         }
     }
+
+    if state.current_tool == EditorTool::Paint && buttons.pressed(MouseButton::Left) {
+        let kind = state.current_kind;
+        let elevation = state.current_elev;
+        let state_ref = &mut *state;
+        let current = state_ref.map.get(x, y);
+        if current.kind != kind || current.elevation != elevation {
+            let tile_type = current.tile_type.clone();
+            let mut ramp_orientation = current.ramp_orientation;
+            if kind != TileKind::Ramp {
+                ramp_orientation = None;
+            }
+            state_ref.map.set(
+                x,
+                y,
+                Tile {
+                    kind,
+                    elevation,
+                    tile_type,
+                    x,
+                    y,
+                    ramp_orientation,
+                },
+            );
+            state_ref.map_dirty = true;
+        }
+    }
+}
+
+fn rotate_ramp_tile(map: &mut TileMap, x: u32, y: u32) -> bool {
+    let idx = map.idx(x, y);
+    if map.tiles[idx].kind != TileKind::Ramp {
+        return false;
+    }
+
+    let manual = map.tiles[idx].ramp_orientation;
+    let base_dir = if let Some(dir) = manual {
+        dir
+    } else {
+        terrain::auto_ramp_direction(map, x, y).unwrap_or(CardinalDirection::North)
+    };
+
+    let next = base_dir.next();
+    map.tiles[idx].ramp_orientation = Some(next);
+    true
 }
 
 fn rebuild_terrain_mesh(
