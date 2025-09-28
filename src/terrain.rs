@@ -1,14 +1,7 @@
-use crate::types::{TILE_HEIGHT, TILE_SIZE, TileKind, TileMap};
+use crate::types::{Direction, TILE_HEIGHT, TILE_SIZE, TileKind, TileMap};
 use bevy::prelude::*;
 use bevy::render::mesh::Indices;
 use bevy::render::render_asset::RenderAssetUsages;
-
-enum Direction {
-    North,
-    East,
-    South,
-    West,
-}
 
 pub const CORNER_NW: usize = 0;
 pub const CORNER_NE: usize = 1;
@@ -21,25 +14,10 @@ pub fn tile_corner_heights(map: &TileMap, x: u32, y: u32) -> [f32; 4] {
     let mut corners = [base; 4];
 
     if tile.kind == TileKind::Ramp {
-        if let Some((dir, neighbor_height)) = find_ramp_target(map, x, y, base) {
-            match dir {
-                Direction::North => {
-                    corners[CORNER_NW] = neighbor_height;
-                    corners[CORNER_NE] = neighbor_height;
-                }
-                Direction::South => {
-                    corners[CORNER_SW] = neighbor_height;
-                    corners[CORNER_SE] = neighbor_height;
-                }
-                Direction::West => {
-                    corners[CORNER_NW] = neighbor_height;
-                    corners[CORNER_SW] = neighbor_height;
-                }
-                Direction::East => {
-                    corners[CORNER_NE] = neighbor_height;
-                    corners[CORNER_SE] = neighbor_height;
-                }
-            }
+        if let Some(height) = ramp_neighbor_height(map, x, y, tile.rotation) {
+            apply_ramp_height(&mut corners, tile.rotation, height);
+        } else if let Some((dir, neighbor_height)) = auto_ramp_target(map, x, y, base) {
+            apply_ramp_height(&mut corners, dir, neighbor_height);
         }
     }
 
@@ -186,33 +164,61 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
     mesh
 }
 
-fn find_ramp_target(map: &TileMap, x: u32, y: u32, base: f32) -> Option<(Direction, f32)> {
+pub fn auto_ramp_direction(map: &TileMap, x: u32, y: u32, base: f32) -> Option<Direction> {
+    auto_ramp_target(map, x, y, base).map(|(dir, _)| dir)
+}
+
+pub fn auto_ramp_target(map: &TileMap, x: u32, y: u32, base: f32) -> Option<(Direction, f32)> {
     let mut result: Option<(Direction, f32)> = None;
-    let mut consider = |dir: Direction, nx: i32, ny: i32| {
-        if nx < 0 || ny < 0 {
-            return;
-        }
-        let (ux, uy) = (nx as u32, ny as u32);
-        if ux >= map.width || uy >= map.height {
-            return;
-        }
-        let neighbor = map.get(ux, uy);
-        let h = neighbor.elevation as f32 * TILE_HEIGHT;
-        if h < base {
-            match &result {
-                Some((_, existing)) if *existing <= h => {}
-                _ => {
-                    result = Some((dir, h));
+    let mut best_diff = f32::MAX;
+    for dir in Direction::ALL {
+        if let Some(height) = ramp_neighbor_height(map, x, y, dir) {
+            if height > base {
+                let diff = height - base;
+                if diff < best_diff {
+                    best_diff = diff;
+                    result = Some((dir, height));
                 }
             }
         }
-    };
-
-    consider(Direction::North, x as i32, y as i32 - 1);
-    consider(Direction::South, x as i32, y as i32 + 1);
-    consider(Direction::West, x as i32 - 1, y as i32);
-    consider(Direction::East, x as i32 + 1, y as i32);
+    }
     result
+}
+
+pub fn ramp_neighbor_height(map: &TileMap, x: u32, y: u32, direction: Direction) -> Option<f32> {
+    let (dx, dy) = direction.offset();
+    let nx = x as i32 + dx;
+    let ny = y as i32 + dy;
+    if nx < 0 || ny < 0 {
+        return None;
+    }
+    let (ux, uy) = (nx as u32, ny as u32);
+    if ux >= map.width || uy >= map.height {
+        return None;
+    }
+    let neighbor = map.get(ux, uy);
+    Some(neighbor.elevation as f32 * TILE_HEIGHT)
+}
+
+fn apply_ramp_height(corners: &mut [f32; 4], direction: Direction, height: f32) {
+    match direction {
+        Direction::North => {
+            corners[CORNER_NW] = height;
+            corners[CORNER_NE] = height;
+        }
+        Direction::East => {
+            corners[CORNER_NE] = height;
+            corners[CORNER_SE] = height;
+        }
+        Direction::South => {
+            corners[CORNER_SW] = height;
+            corners[CORNER_SE] = height;
+        }
+        Direction::West => {
+            corners[CORNER_NW] = height;
+            corners[CORNER_SW] = height;
+        }
+    }
 }
 
 fn push_quad(

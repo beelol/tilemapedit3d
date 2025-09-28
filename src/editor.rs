@@ -13,7 +13,7 @@ impl Plugin for EditorPlugin {
                 Update,
                 (
                     update_hover,
-                    paint_tiles,
+                    handle_editor_actions,
                     rebuild_terrain_mesh,
                     draw_hover_highlight,
                 ),
@@ -28,6 +28,7 @@ pub struct EditorState {
     pub hover: Option<(u32, u32)>,
     pub map: TileMap,
     pub map_dirty: bool,
+    pub current_tool: EditorTool,
 }
 impl Default for EditorState {
     fn default() -> Self {
@@ -37,8 +38,15 @@ impl Default for EditorState {
             hover: None,
             map: TileMap::new(64, 64),
             map_dirty: true,
+            current_tool: EditorTool::Paint,
         }
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum EditorTool {
+    Paint,
+    Rotate,
 }
 
 #[derive(Resource)]
@@ -65,12 +73,15 @@ fn spawn_editor_assets(
     ));
 
     let terrain_material = mats.add(StandardMaterial {
-        base_color_texture: Some(asset_server.load("textures/terrain/rocky_terrain_02_diff_1k.png")),
-        normal_map_texture: Some(asset_server.load("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr")),
+        base_color_texture: Some(
+            asset_server.load("textures/terrain/rocky_terrain_02_diff_1k.png"),
+        ),
+        normal_map_texture: Some(
+            asset_server.load("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
+        ),
         metallic: 0.0,
         ..default()
     });
-
 
     commands.spawn(PbrBundle {
         mesh: terrain_mesh.clone(),
@@ -137,37 +148,74 @@ fn update_hover(
     state.hover = None;
 }
 
-fn paint_tiles(
+fn handle_editor_actions(
     buttons: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
     mut state: ResMut<EditorState>,
     mut egui: EguiContexts,
 ) {
     if egui.ctx_mut().wants_pointer_input() {
         return;
     }
-    if buttons.pressed(MouseButton::Left) {
-        if let Some((x, y)) = state.hover {
-            let kind = state.current_kind;
-            let elevation = state.current_elev;
-            let state_ref = &mut *state;
-            let current = state_ref.map.get(x, y);
-            if current.kind != kind || current.elevation != elevation {
-                let tile_type = current.tile_type.clone();
-                state_ref.map.set(
-                    x,
-                    y,
-                    Tile {
-                        kind,
-                        elevation,
-                        tile_type,
-                        x,
-                        y,
-                    },
-                );
-                state_ref.map_dirty = true;
+    if let Some((x, y)) = state.hover {
+        let mut changed = false;
+        match state.current_tool {
+            EditorTool::Paint => {
+                if buttons.pressed(MouseButton::Left) {
+                    let kind = state.current_kind;
+                    let elevation = state.current_elev;
+                    let current = state.map.get(x, y).clone();
+                    if current.kind != kind || current.elevation != elevation {
+                        let tile_type = current.tile_type.clone();
+                        let rotation = if kind == TileKind::Ramp {
+                            let base = elevation as f32 * TILE_HEIGHT;
+                            terrain::auto_ramp_direction(&state.map, x, y, base)
+                                .unwrap_or(current.rotation)
+                        } else {
+                            current.rotation
+                        };
+                        state.map.set(
+                            x,
+                            y,
+                            Tile {
+                                kind,
+                                elevation,
+                                tile_type,
+                                x,
+                                y,
+                                rotation,
+                            },
+                        );
+                        changed = true;
+                    }
+                }
+            }
+            EditorTool::Rotate => {
+                if buttons.just_pressed(MouseButton::Left) {
+                    changed |= rotate_ramp(&mut state.map, x, y);
+                }
             }
         }
+
+        if buttons.just_pressed(MouseButton::Right) || keys.just_pressed(KeyCode::KeyR) {
+            changed |= rotate_ramp(&mut state.map, x, y);
+        }
+
+        if changed {
+            state.map_dirty = true;
+        }
     }
+}
+
+fn rotate_ramp(map: &mut TileMap, x: u32, y: u32) -> bool {
+    let idx = map.idx(x, y);
+    if let Some(tile) = map.tiles.get_mut(idx) {
+        if tile.kind == TileKind::Ramp {
+            tile.rotation = tile.rotation.clockwise();
+            return true;
+        }
+    }
+    false
 }
 
 fn rebuild_terrain_mesh(
