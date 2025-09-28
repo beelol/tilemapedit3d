@@ -8,7 +8,9 @@ pub struct EditorPlugin;
 impl Plugin for EditorPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EditorState>()
+            .init_gizmo_group::<HoverGizmoGroup>()
             .add_systems(Startup, spawn_editor_assets)
+            .add_systems(Startup, configure_hover_gizmos)
             .add_systems(
                 Update,
                 (
@@ -53,6 +55,15 @@ impl Default for EditorState {
 #[derive(Resource)]
 struct TerrainVisual {
     mesh: Handle<Mesh>,
+}
+
+#[derive(Default, Reflect, GizmoConfigGroup)]
+#[reflect(Default)]
+struct HoverGizmoGroup;
+
+fn configure_hover_gizmos(mut configs: ResMut<GizmoConfigStore>) {
+    let (config, _) = configs.config_mut::<HoverGizmoGroup>();
+    config.depth_bias = -1.0;
 }
 
 fn spawn_editor_assets(
@@ -293,7 +304,7 @@ fn rebuild_terrain_mesh(
     }
 }
 
-fn draw_hover_highlight(mut gizmos: Gizmos, state: Res<EditorState>) {
+fn draw_hover_highlight(mut gizmos: Gizmos<HoverGizmoGroup>, state: Res<EditorState>) {
     if let Some((x, y)) = state.hover {
         let heights = terrain::tile_corner_heights(&state.map, x, y);
         let offset = 0.02;

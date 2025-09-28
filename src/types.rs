@@ -98,7 +98,6 @@ impl TileMap {
     }
 }
 
-pub const TILE_SIZE: f32 = 1.0;     // world units per tile
+pub const TILE_SIZE: f32 = 1.0; // world units per tile
 pub const ELEVATION_FRACTION: f32 = 0.4; // fraction of tile width per elevation step
-pub const TILE_HEIGHT: f32 = TILE_SIZE * ELEVATION_FRACTION;   // height per elevation step
-
+pub const TILE_HEIGHT: f32 = TILE_SIZE * ELEVATION_FRACTION; // height per elevation step
