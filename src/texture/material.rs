@@ -14,10 +14,10 @@ pub struct TerrainMaterialHandles {
 pub fn load_terrain_material(
     asset_server: &AssetServer,
     materials: &mut Assets<StandardMaterial>,
-    base_color: &str,
-    normal: Option<&str>,
-    roughness: Option<&str>,
-    specular: Option<&str>,
+    base_color: String,
+    normal: Option<String>,
+    roughness: Option<String>,
+    specular: Option<String>,
 ) -> TerrainMaterialHandles {
     let base_color_handle: Handle<Image> = asset_server.load(base_color);
     let normal_handle: Option<Handle<Image>> = normal.map(|path| asset_server.load(path));

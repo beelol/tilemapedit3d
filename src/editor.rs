@@ -95,8 +95,10 @@ fn spawn_editor_assets(
         &mut mats,
         "textures/terrain/rocky_terrain_02_diff_1k.png",
         Some("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
-        Some("textures/terrain/rocky_terrain_02_rough_1k.exr"),
-        Some("textures/terrain/rocky_terrain_02_spec_1k.png"),
+        // Some("textures/terrain/rocky_terrain_02_rough_1k.exr"),
+        None,
+        // Some("textures/terrain/rocky_terrain_02_spec_1k.png"),
+        None,
     );
 
     let mut visual = TerrainVisual::default();

@@ -49,10 +49,10 @@ impl TerrainTextureRegistry {
         } = material::load_terrain_material(
             asset_server,
             materials,
-            base_color,
-            normal,
-            roughness,
-            specular,
+            base_color.to_string(),
+            normal.map(|s| s.to_string()),
+            roughness.map(|s| s.to_string()),
+            specular.map(|s| s.to_string())
         );
 
         self.register_loaded(TerrainTextureEntry {
