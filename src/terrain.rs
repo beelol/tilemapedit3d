@@ -10,10 +10,41 @@ enum Direction {
     West,
 }
 
-const CORNER_NW: usize = 0;
-const CORNER_NE: usize = 1;
-const CORNER_SW: usize = 2;
-const CORNER_SE: usize = 3;
+pub const CORNER_NW: usize = 0;
+pub const CORNER_NE: usize = 1;
+pub const CORNER_SW: usize = 2;
+pub const CORNER_SE: usize = 3;
+
+pub fn tile_corner_heights(map: &TileMap, x: u32, y: u32) -> [f32; 4] {
+    let tile = map.get(x, y);
+    let base = tile.elevation as f32 * TILE_HEIGHT;
+    let mut corners = [base; 4];
+
+    if tile.kind == TileKind::Ramp {
+        if let Some((dir, neighbor_height)) = find_ramp_target(map, x, y, base) {
+            match dir {
+                Direction::North => {
+                    corners[CORNER_NW] = neighbor_height;
+                    corners[CORNER_NE] = neighbor_height;
+                }
+                Direction::South => {
+                    corners[CORNER_SW] = neighbor_height;
+                    corners[CORNER_SE] = neighbor_height;
+                }
+                Direction::West => {
+                    corners[CORNER_NW] = neighbor_height;
+                    corners[CORNER_SW] = neighbor_height;
+                }
+                Direction::East => {
+                    corners[CORNER_NE] = neighbor_height;
+                    corners[CORNER_SE] = neighbor_height;
+                }
+            }
+        }
+    }
+
+    corners
+}
 
 pub fn build_map_mesh(map: &TileMap) -> Mesh {
     if map.width == 0 || map.height == 0 {
@@ -28,34 +59,7 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
     for y in 0..map.height {
         for x in 0..map.width {
             let idx = map.idx(x, y);
-            let tile = map.get(x, y);
-            let base = tile.elevation as f32 * TILE_HEIGHT;
-            let mut corners = [base; 4];
-
-            if tile.kind == TileKind::Ramp {
-                if let Some((dir, neighbor_height)) = find_ramp_target(map, x, y, base) {
-                    match dir {
-                        Direction::North => {
-                            corners[CORNER_NW] = neighbor_height;
-                            corners[CORNER_NE] = neighbor_height;
-                        }
-                        Direction::South => {
-                            corners[CORNER_SW] = neighbor_height;
-                            corners[CORNER_SE] = neighbor_height;
-                        }
-                        Direction::West => {
-                            corners[CORNER_NW] = neighbor_height;
-                            corners[CORNER_SW] = neighbor_height;
-                        }
-                        Direction::East => {
-                            corners[CORNER_NE] = neighbor_height;
-                            corners[CORNER_SE] = neighbor_height;
-                        }
-                    }
-                }
-            }
-
-            corner_cache[idx] = corners;
+            corner_cache[idx] = tile_corner_heights(map, x, y);
         }
     }
 

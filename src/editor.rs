@@ -41,12 +41,6 @@ impl Default for EditorState {
     }
 }
 
-// Simple green overlay material
-#[derive(Resource)]
-struct Materials {
-    hover: Handle<StandardMaterial>,
-}
-
 #[derive(Resource)]
 struct TerrainVisual {
     mesh: Handle<Mesh>,
@@ -58,11 +52,6 @@ fn spawn_editor_assets(
     mut meshes: ResMut<Assets<Mesh>>,
     asset_server: Res<AssetServer>,
 ) {
-    let hover = mats.add(StandardMaterial {
-        base_color: Color::rgba(0.0, 1.0, 0.0, 0.25),
-        unlit: true,
-        ..default()
-    });
     let terrain_material = mats.add(StandardMaterial {
         base_color: Color::rgb(0.35, 0.55, 0.2),
         perceptual_roughness: 0.8,
@@ -90,7 +79,6 @@ fn spawn_editor_assets(
         ..default()
     });
 
-    commands.insert_resource(Materials { hover });
     commands.insert_resource(TerrainVisual { mesh: terrain_mesh });
 }
 
@@ -108,24 +96,44 @@ fn update_hover(
         state.hover = None;
         return;
     }
+
     let Some(cursor) = win.cursor_position() else {
         state.hover = None;
         return;
     };
 
     if let Some(ray) = cam.viewport_to_world(cam_xform, cursor) {
-        let plane_y = state.current_elev as f32 * TILE_HEIGHT;
-        let t = (plane_y - ray.origin.y) / ray.direction.y;
-        if t.is_finite() && t > 0.0 {
-            let hit = ray.origin + ray.direction * t;
-            let x = (hit.x / TILE_SIZE).floor() as i32;
-            let y = (hit.z / TILE_SIZE).floor() as i32;
-            if x >= 0 && y >= 0 && (x as u32) < state.map.width && (y as u32) < state.map.height {
-                state.hover = Some((x as u32, y as u32));
-                return;
+        // --- Step 1: flat projection (y = 0) candidate
+        let guess_hit = ray.origin + ray.direction * ((0.0 - ray.origin.y) / ray.direction.y);
+        let tx = (guess_hit.x / TILE_SIZE).floor() as i32;
+        let ty = (guess_hit.z / TILE_SIZE).floor() as i32;
+
+        if tx >= 0 && ty >= 0 && (tx as u32) < state.map.width && (ty as u32) < state.map.height {
+            // Look up elevation at this flat tile
+            let idx = (ty as u32 * state.map.width + tx as u32) as usize;
+            let elev = state.map.tiles[idx].elevation as f32 * TILE_HEIGHT;
+
+            // --- Step 2: recompute ray-plane hit at elevation
+            let t = (elev - ray.origin.y) / ray.direction.y;
+            if t.is_finite() && t > 0.0 {
+                let hit = ray.origin + ray.direction * t;
+                let x2 = (hit.x / TILE_SIZE).floor() as i32;
+                let y2 = (hit.z / TILE_SIZE).floor() as i32;
+
+                // Prefer elevated if it resolves to the same tile coords
+                if x2 == tx && y2 == ty {
+                    state.hover = Some((x2 as u32, y2 as u32));
+                    return;
+                }
             }
+
+            // --- Fallback to flat tile
+            state.hover = Some((tx as u32, ty as u32));
+            return;
         }
     }
+
+    // --- Nothing hit
     state.hover = None;
 }
 
@@ -178,42 +186,23 @@ fn rebuild_terrain_mesh(
     }
 }
 
-// Draw a thin quad on hovered tile at its elevation
-#[derive(Component)]
-struct HoverMarker;
-
-fn draw_hover_highlight(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mats: Res<Materials>,
-    state: Res<EditorState>,
-    existing: Query<Entity, With<HoverMarker>>,
-) {
-    // clear previous
-    for e in &existing {
-        commands.entity(e).despawn();
-    }
-
+fn draw_hover_highlight(mut gizmos: Gizmos, state: Res<EditorState>) {
     if let Some((x, y)) = state.hover {
-        let min = Vec3::new(
-            x as f32 * TILE_SIZE,
-            state.current_elev as f32 * TILE_HEIGHT + 0.01,
-            y as f32 * TILE_SIZE,
+        let heights = terrain::tile_corner_heights(&state.map, x, y);
+        let offset = 0.02;
+        let x0 = x as f32 * TILE_SIZE;
+        let x1 = x0 + TILE_SIZE;
+        let z0 = y as f32 * TILE_SIZE;
+        let z1 = z0 + TILE_SIZE;
+        gizmos.linestrip(
+            [
+                Vec3::new(x0, heights[terrain::CORNER_NW] + offset, z0),
+                Vec3::new(x1, heights[terrain::CORNER_NE] + offset, z0),
+                Vec3::new(x1, heights[terrain::CORNER_SE] + offset, z1),
+                Vec3::new(x0, heights[terrain::CORNER_SW] + offset, z1),
+                Vec3::new(x0, heights[terrain::CORNER_NW] + offset, z0),
+            ],
+            Color::srgb(0.0, 1.0, 0.0),
         );
-        let size = Vec2::splat(TILE_SIZE);
-        let mesh = Mesh::from(Rectangle::new(size.x, size.y));
-        commands.spawn((
-            PbrBundle {
-                mesh: meshes.add(mesh),
-                material: mats.hover.clone(),
-                transform: Transform::from_translation(
-                    min + Vec3::new(TILE_SIZE * 0.5, 0.0, TILE_SIZE * 0.5),
-                ) * Transform::from_rotation(Quat::from_rotation_x(
-                    -std::f32::consts::FRAC_PI_2,
-                )),
-                ..default()
-            },
-            HoverMarker,
-        ));
     }
 }
