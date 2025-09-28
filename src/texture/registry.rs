@@ -36,7 +36,7 @@ impl TerrainTextureRegistry {
         tile_type: TileType,
         name: impl Into<String>,
         asset_server: &AssetServer,
-        base_color: &str,
+        base_color: &'static str,
         tint: Color,
     ) -> Handle<Image> {
         let base_color_handle: Handle<Image> = asset_server.load(base_color);
@@ -90,7 +90,13 @@ impl TerrainTextureRegistry {
         for (index, layer) in TERRAIN_LAYERS.iter().enumerate() {
             if let Some(entry) = self.get(*layer) {
                 handles[index] = entry.base_color.clone();
-                tints[index] = Vec4::from_array(entry.tint.as_linear_rgba_f32());
+                let tint_linear = entry.tint.to_linear();
+                tints[index] = Vec4::new(
+                    tint_linear.red,
+                    tint_linear.green,
+                    tint_linear.blue,
+                    tint_linear.alpha,
+                );
             }
         }
 

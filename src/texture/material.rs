@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use bevy::render::render_resource::{AsBindGroup, ShaderRef, ShaderType};
 
-use crate::types::{TERRAIN_LAYERS, TileType};
+use crate::types::TERRAIN_LAYERS;
 
 pub type TerrainMaterial = ExtendedMaterial<StandardMaterial, TerrainBlendExtension>;
 

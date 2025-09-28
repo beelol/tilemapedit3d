@@ -3,8 +3,9 @@ use crate::texture::material::{TerrainBlendExtension, TerrainBlendParams, Terrai
 use crate::texture::registry::TerrainTextureRegistry;
 use crate::types::*;
 use bevy::prelude::*;
-use bevy::render::render_resource::{AddressMode, FilterMode, SamplerDescriptor};
-use bevy::render::texture::ImageSampler;
+use bevy::render::texture::{
+    ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor,
+};
 use bevy_egui::EguiContexts;
 
 pub struct EditorPlugin;
@@ -240,12 +241,12 @@ fn paint_tiles(
         if let Some((x, y)) = state.hover {
             let kind = state.current_kind;
             let elevation = state.current_elev;
-            let tile_type = state.current_texture;
+            let selected_tile_type = state.current_texture;
             let state_ref = &mut *state;
-            let current = state_ref.map.get(x, y);
+            let current = state_ref.map.get(x, y).clone();
             let target_ramp_direction = if kind == TileKind::Ramp {
                 let base = elevation as f32 * TILE_HEIGHT;
-                let mut candidates = ramp_targets(&state_ref.map, x, y, base);
+                let candidates = ramp_targets(&state_ref.map, x, y, base);
                 if let Some(existing) = current.ramp_direction {
                     if candidates.contains(&existing) {
                         Some(existing)
@@ -259,20 +260,18 @@ fn paint_tiles(
                 None
             };
 
-            let tile_type = current.tile_type.clone();
             if current.kind != kind
                 || current.elevation != elevation
                 || current.ramp_direction != target_ramp_direction
-                || current.tile_type != tile_type
+                || current.tile_type != selected_tile_type
             {
-                let tile_type = current.tile_type.clone();
                 state_ref.map.set(
                     x,
                     y,
                     Tile {
                         kind,
                         elevation,
-                        tile_type,
+                        tile_type: selected_tile_type,
                         x,
                         y,
                         ramp_direction: target_ramp_direction,
@@ -378,8 +377,6 @@ fn rebuild_terrain_mesh(
     let splat = terrain::build_splatmap(&state.map);
     if let Some(existing) = images.get_mut(&visual.splatmap) {
         *existing = splat;
-    } else {
-        images.insert(visual.splatmap.clone(), splat);
     }
 
     let (layer_handles, layer_tints) = textures.layer_textures();
@@ -418,13 +415,13 @@ fn configure_terrain_samplers(
 ) {
     for entry in textures.iter() {
         if let Some(image) = images.get_mut(&entry.base_color) {
-            image.sampler_descriptor = ImageSampler::Descriptor(SamplerDescriptor {
-                address_mode_u: AddressMode::Repeat,
-                address_mode_v: AddressMode::Repeat,
-                address_mode_w: AddressMode::Repeat,
-                mag_filter: FilterMode::Linear,
-                min_filter: FilterMode::Linear,
-                mipmap_filter: FilterMode::Linear,
+            image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+                address_mode_u: ImageAddressMode::Repeat,
+                address_mode_v: ImageAddressMode::Repeat,
+                address_mode_w: ImageAddressMode::Repeat,
+                mag_filter: ImageFilterMode::Linear,
+                min_filter: ImageFilterMode::Linear,
+                mipmap_filter: ImageFilterMode::Linear,
                 ..Default::default()
             });
         }

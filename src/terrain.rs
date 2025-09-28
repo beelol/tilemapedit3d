@@ -1,14 +1,13 @@
-use crate::types::{
-    RampDirection, TERRAIN_LAYERS, TILE_HEIGHT, TILE_SIZE, TileKind, TileMap, TileType,
-};
+use crate::types::{RampDirection, TERRAIN_LAYERS, TILE_HEIGHT, TILE_SIZE, TileKind, TileMap};
 use bevy::prelude::*;
 use bevy::render::mesh::Indices;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{
-    AddressMode, Extent3d, FilterMode, PrimitiveTopology, SamplerDescriptor, TextureDimension,
-    TextureFormat, TextureUsages,
+    Extent3d, PrimitiveTopology, TextureDimension, TextureFormat, TextureUsages,
 };
-use bevy::render::texture::ImageSampler;
+use bevy::render::texture::{
+    ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor,
+};
 
 pub const CORNER_NW: usize = 0;
 pub const CORNER_NE: usize = 1;
@@ -164,6 +163,7 @@ pub fn build_splatmap(map: &TileMap) -> Image {
             TextureDimension::D2,
             &[255, 0, 0, 0],
             TextureFormat::Rgba8Unorm,
+            RenderAssetUsages::default(),
         );
         configure_splatmap_image(&mut image);
         return image;
@@ -191,6 +191,7 @@ pub fn build_splatmap(map: &TileMap) -> Image {
         TextureDimension::D2,
         &data,
         TextureFormat::Rgba8Unorm,
+        RenderAssetUsages::default(),
     );
     configure_splatmap_image(&mut image);
     image
@@ -199,13 +200,13 @@ pub fn build_splatmap(map: &TileMap) -> Image {
 fn configure_splatmap_image(image: &mut Image) {
     image.texture_descriptor.usage =
         TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::COPY_SRC;
-    image.sampler_descriptor = ImageSampler::Descriptor(SamplerDescriptor {
-        address_mode_u: AddressMode::ClampToEdge,
-        address_mode_v: AddressMode::ClampToEdge,
-        address_mode_w: AddressMode::ClampToEdge,
-        mag_filter: FilterMode::Linear,
-        min_filter: FilterMode::Linear,
-        mipmap_filter: FilterMode::Linear,
+    image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+        address_mode_u: ImageAddressMode::ClampToEdge,
+        address_mode_v: ImageAddressMode::ClampToEdge,
+        address_mode_w: ImageAddressMode::ClampToEdge,
+        mag_filter: ImageFilterMode::Linear,
+        min_filter: ImageFilterMode::Linear,
+        mipmap_filter: ImageFilterMode::Linear,
         ..Default::default()
     });
 }
