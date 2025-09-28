@@ -1,14 +1,7 @@
-use crate::types::{TILE_HEIGHT, TILE_SIZE, TileKind, TileMap};
+use crate::types::{RampDirection, TILE_HEIGHT, TILE_SIZE, TileKind, TileMap};
 use bevy::prelude::*;
 use bevy::render::mesh::Indices;
 use bevy::render::render_asset::RenderAssetUsages;
-
-enum Direction {
-    North,
-    East,
-    South,
-    West,
-}
 
 pub const CORNER_NW: usize = 0;
 pub const CORNER_NE: usize = 1;
@@ -21,21 +14,29 @@ pub fn tile_corner_heights(map: &TileMap, x: u32, y: u32) -> [f32; 4] {
     let mut corners = [base; 4];
 
     if tile.kind == TileKind::Ramp {
-        if let Some((dir, neighbor_height)) = find_ramp_target(map, x, y, base) {
+        let mut target = tile
+            .ramp_direction
+            .and_then(|dir| ramp_neighbor_height(map, x, y, dir, base).map(|h| (dir, h)));
+
+        if target.is_none() {
+            target = find_ramp_target(map, x, y, base);
+        }
+
+        if let Some((dir, neighbor_height)) = target {
             match dir {
-                Direction::North => {
+                RampDirection::North => {
                     corners[CORNER_NW] = neighbor_height;
                     corners[CORNER_NE] = neighbor_height;
                 }
-                Direction::South => {
+                RampDirection::South => {
                     corners[CORNER_SW] = neighbor_height;
                     corners[CORNER_SE] = neighbor_height;
                 }
-                Direction::West => {
+                RampDirection::West => {
                     corners[CORNER_NW] = neighbor_height;
                     corners[CORNER_SW] = neighbor_height;
                 }
-                Direction::East => {
+                RampDirection::East => {
                     corners[CORNER_NE] = neighbor_height;
                     corners[CORNER_SE] = neighbor_height;
                 }
@@ -110,7 +111,7 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
                 ne,
                 Vec3::new(x0, bnw.min(nw.y), z0),
                 Vec3::new(x1, bne.min(ne.y), z0),
-                Direction::North,
+                RampDirection::North,
             );
 
             // South edge (towards y+1)
@@ -130,7 +131,7 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
                 sw,
                 Vec3::new(x1, bse.min(se.y), z1),
                 Vec3::new(x0, bsw.min(sw.y), z1),
-                Direction::South,
+                RampDirection::South,
             );
 
             // West edge (towards x-1)
@@ -150,7 +151,7 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
                 nw,
                 Vec3::new(x0, bsw.min(sw.y), z1),
                 Vec3::new(x0, bnw.min(nw.y), z0),
-                Direction::West,
+                RampDirection::West,
             );
 
             // East edge (towards x+1)
@@ -170,7 +171,7 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
                 se,
                 Vec3::new(x1, bne.min(ne.y), z0),
                 Vec3::new(x1, bse.min(se.y), z1),
-                Direction::East,
+                RampDirection::East,
             );
         }
     }
@@ -186,33 +187,41 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
     mesh
 }
 
-fn find_ramp_target(map: &TileMap, x: u32, y: u32, base: f32) -> Option<(Direction, f32)> {
-    let mut result: Option<(Direction, f32)> = None;
-    let mut consider = |dir: Direction, nx: i32, ny: i32| {
-        if nx < 0 || ny < 0 {
-            return;
-        }
-        let (ux, uy) = (nx as u32, ny as u32);
-        if ux >= map.width || uy >= map.height {
-            return;
-        }
-        let neighbor = map.get(ux, uy);
-        let h = neighbor.elevation as f32 * TILE_HEIGHT;
-        if h < base {
+fn find_ramp_target(map: &TileMap, x: u32, y: u32, base: f32) -> Option<(RampDirection, f32)> {
+    let mut result: Option<(RampDirection, f32)> = None;
+    for dir in RampDirection::ALL {
+        if let Some(height) = ramp_neighbor_height(map, x, y, dir, base) {
             match &result {
-                Some((_, existing)) if *existing <= h => {}
+                Some((_, existing)) if *existing <= height => {}
                 _ => {
-                    result = Some((dir, h));
+                    result = Some((dir, height));
                 }
             }
         }
-    };
-
-    consider(Direction::North, x as i32, y as i32 - 1);
-    consider(Direction::South, x as i32, y as i32 + 1);
-    consider(Direction::West, x as i32 - 1, y as i32);
-    consider(Direction::East, x as i32 + 1, y as i32);
+    }
     result
+}
+
+fn ramp_neighbor_height(
+    map: &TileMap,
+    x: u32,
+    y: u32,
+    dir: RampDirection,
+    base: f32,
+) -> Option<f32> {
+    let (dx, dy) = dir.offset();
+    let nx = x as i32 + dx;
+    let ny = y as i32 + dy;
+    if nx < 0 || ny < 0 {
+        return None;
+    }
+    let (ux, uy) = (nx as u32, ny as u32);
+    if ux >= map.width || uy >= map.height {
+        return None;
+    }
+    let neighbor = map.get(ux, uy);
+    let height = neighbor.elevation as f32 * TILE_HEIGHT;
+    if height < base { Some(height) } else { None }
 }
 
 fn push_quad(
@@ -271,7 +280,7 @@ fn add_side_face(
     top_b: Vec3,
     bottom_a: Vec3,
     bottom_b: Vec3,
-    direction: Direction,
+    direction: RampDirection,
 ) {
     const EPS: f32 = 1e-4;
     if (top_a.y - bottom_a.y).abs() < EPS && (top_b.y - bottom_b.y).abs() < EPS {
@@ -279,19 +288,19 @@ fn add_side_face(
     }
 
     let (verts, tex) = match direction {
-        Direction::North => (
+        RampDirection::North => (
             [top_a, top_b, bottom_b, bottom_a],
             [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
         ),
-        Direction::South => (
+        RampDirection::South => (
             [top_a, top_b, bottom_b, bottom_a],
             [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
         ),
-        Direction::West => (
+        RampDirection::West => (
             [top_a, top_b, bottom_b, bottom_a],
             [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
         ),
-        Direction::East => (
+        RampDirection::East => (
             [top_a, top_b, bottom_b, bottom_a],
             [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
         ),

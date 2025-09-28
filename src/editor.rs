@@ -14,6 +14,7 @@ impl Plugin for EditorPlugin {
                 (
                     update_hover,
                     paint_tiles,
+                    rotate_ramps,
                     rebuild_terrain_mesh,
                     draw_hover_highlight,
                 ),
@@ -21,8 +22,15 @@ impl Plugin for EditorPlugin {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum EditorTool {
+    Paint,
+    RotateRamp,
+}
+
 #[derive(Resource)]
 pub struct EditorState {
+    pub current_tool: EditorTool,
     pub current_kind: TileKind,
     pub current_elev: i8, // -1..3
     pub hover: Option<(u32, u32)>,
@@ -32,6 +40,7 @@ pub struct EditorState {
 impl Default for EditorState {
     fn default() -> Self {
         Self {
+            current_tool: EditorTool::Paint,
             current_kind: TileKind::Floor,
             current_elev: 0,
             hover: None,
@@ -65,12 +74,15 @@ fn spawn_editor_assets(
     ));
 
     let terrain_material = mats.add(StandardMaterial {
-        base_color_texture: Some(asset_server.load("textures/terrain/rocky_terrain_02_diff_1k.png")),
-        normal_map_texture: Some(asset_server.load("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr")),
+        base_color_texture: Some(
+            asset_server.load("textures/terrain/rocky_terrain_02_diff_1k.png"),
+        ),
+        normal_map_texture: Some(
+            asset_server.load("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
+        ),
         metallic: 0.0,
         ..default()
     });
-
 
     commands.spawn(PbrBundle {
         mesh: terrain_mesh.clone(),
@@ -145,13 +157,34 @@ fn paint_tiles(
     if egui.ctx_mut().wants_pointer_input() {
         return;
     }
+    if state.current_tool != EditorTool::Paint {
+        return;
+    }
     if buttons.pressed(MouseButton::Left) {
         if let Some((x, y)) = state.hover {
             let kind = state.current_kind;
             let elevation = state.current_elev;
             let state_ref = &mut *state;
             let current = state_ref.map.get(x, y);
-            if current.kind != kind || current.elevation != elevation {
+            let target_ramp_direction = if kind == TileKind::Ramp {
+                let base = elevation as f32 * TILE_HEIGHT;
+                let mut candidates = ramp_targets(&state_ref.map, x, y, base);
+                if let Some(existing) = current.ramp_direction {
+                    if candidates.contains(&existing) {
+                        Some(existing)
+                    } else {
+                        candidates.first().copied()
+                    }
+                } else {
+                    candidates.first().copied()
+                }
+            } else {
+                None
+            };
+            if current.kind != kind
+                || current.elevation != elevation
+                || current.ramp_direction != target_ramp_direction
+            {
                 let tile_type = current.tile_type.clone();
                 state_ref.map.set(
                     x,
@@ -162,12 +195,86 @@ fn paint_tiles(
                         tile_type,
                         x,
                         y,
+                        ramp_direction: target_ramp_direction,
                     },
                 );
                 state_ref.map_dirty = true;
             }
         }
     }
+}
+
+fn rotate_ramps(
+    buttons: Res<ButtonInput<MouseButton>>,
+    mut state: ResMut<EditorState>,
+    mut egui: EguiContexts,
+) {
+    if egui.ctx_mut().wants_pointer_input() {
+        return;
+    }
+    if state.current_tool != EditorTool::RotateRamp {
+        return;
+    }
+    if !buttons.just_pressed(MouseButton::Left) {
+        return;
+    }
+
+    let Some((x, y)) = state.hover else {
+        return;
+    };
+
+    let base_tile = state.map.get(x, y).clone();
+    if base_tile.kind != TileKind::Ramp {
+        return;
+    }
+
+    let base_height = base_tile.elevation as f32 * TILE_HEIGHT;
+    let candidates = ramp_targets(&state.map, x, y, base_height);
+    if candidates.is_empty() {
+        return;
+    }
+
+    let next_direction = match base_tile.ramp_direction {
+        Some(current) => {
+            if let Some(idx) = candidates.iter().position(|&dir| dir == current) {
+                candidates[(idx + 1) % candidates.len()]
+            } else {
+                candidates[0]
+            }
+        }
+        None => candidates[0],
+    };
+
+    if base_tile.ramp_direction == Some(next_direction) {
+        return;
+    }
+
+    let mut updated = base_tile;
+    updated.ramp_direction = Some(next_direction);
+    state.map.set(x, y, updated);
+    state.map_dirty = true;
+}
+
+fn ramp_targets(map: &TileMap, x: u32, y: u32, base: f32) -> Vec<RampDirection> {
+    let mut results = Vec::new();
+    for dir in RampDirection::ALL {
+        let (dx, dy) = dir.offset();
+        let nx = x as i32 + dx;
+        let ny = y as i32 + dy;
+        if nx < 0 || ny < 0 {
+            continue;
+        }
+        let (ux, uy) = (nx as u32, ny as u32);
+        if ux >= map.width || uy >= map.height {
+            continue;
+        }
+        let neighbor = map.get(ux, uy);
+        let height = neighbor.elevation as f32 * TILE_HEIGHT;
+        if height < base {
+            results.push(dir);
+        }
+    }
+    results
 }
 
 fn rebuild_terrain_mesh(
