@@ -52,7 +52,7 @@ impl TerrainTextureRegistry {
             base_color.to_string(),
             normal.map(|s| s.to_string()),
             roughness.map(|s| s.to_string()),
-            specular.map(|s| s.to_string())
+            specular.map(|s| s.to_string()),
         );
 
         self.register_loaded(TerrainTextureEntry {

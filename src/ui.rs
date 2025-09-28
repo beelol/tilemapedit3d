@@ -94,24 +94,27 @@ fn ui_panel(
                             egui::Stroke::NONE
                         };
 
-                        let inner = egui::Frame::none()
+                        let response = egui::Frame::none()
                             .inner_margin(egui::Margin::same(2.0))
                             .stroke(stroke)
                             .show(grid_ui, |ui| {
                                 ui.set_min_size(egui::Vec2::splat(36.0));
                                 ui.centered_and_justified(|ui| {
-                                    ui.add(egui::Image::new(egui::load::SizedTexture {
-                                        id: item.texture,
-                                        size: egui::vec2(32.0, 32.0),
-                                    }));
-                                });
-                            });
+                                    ui.add(
+                                        egui::ImageButton::new(egui::load::SizedTexture {
+                                            id: item.texture,
+                                            size: egui::vec2(32.0, 32.0),
+                                        })
+                                        .frame(false),
+                                    )
+                                })
+                                .inner
+                            })
+                            .inner;
 
-                        let mut response = inner.response;
+                        let response = response.on_hover_text(item.name.clone());
 
-                        let response2 = response.on_hover_text(item.name.clone());
-
-                        if response2.clicked() {
+                        if response.clicked() {
                             state.current_texture = item.tile_type;
                         }
 
