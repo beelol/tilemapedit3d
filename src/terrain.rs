@@ -226,7 +226,7 @@ impl MeshBuffers {
         top_b: Vec3,
         bottom_a: Vec3,
         bottom_b: Vec3,
-        direction: Direction,
+        direction: RampDirection,
     ) {
         add_side_face(
             &mut self.positions,
