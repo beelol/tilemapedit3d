@@ -96,24 +96,44 @@ fn update_hover(
         state.hover = None;
         return;
     }
+
     let Some(cursor) = win.cursor_position() else {
         state.hover = None;
         return;
     };
 
     if let Some(ray) = cam.viewport_to_world(cam_xform, cursor) {
-        let plane_y = state.current_elev as f32 * TILE_HEIGHT;
-        let t = (plane_y - ray.origin.y) / ray.direction.y;
-        if t.is_finite() && t > 0.0 {
-            let hit = ray.origin + ray.direction * t;
-            let x = (hit.x / TILE_SIZE).floor() as i32;
-            let y = (hit.z / TILE_SIZE).floor() as i32;
-            if x >= 0 && y >= 0 && (x as u32) < state.map.width && (y as u32) < state.map.height {
-                state.hover = Some((x as u32, y as u32));
-                return;
+        // --- Step 1: flat projection (y = 0) candidate
+        let guess_hit = ray.origin + ray.direction * ((0.0 - ray.origin.y) / ray.direction.y);
+        let tx = (guess_hit.x / TILE_SIZE).floor() as i32;
+        let ty = (guess_hit.z / TILE_SIZE).floor() as i32;
+
+        if tx >= 0 && ty >= 0 && (tx as u32) < state.map.width && (ty as u32) < state.map.height {
+            // Look up elevation at this flat tile
+            let idx = (ty as u32 * state.map.width + tx as u32) as usize;
+            let elev = state.map.tiles[idx].elevation as f32 * TILE_HEIGHT;
+
+            // --- Step 2: recompute ray-plane hit at elevation
+            let t = (elev - ray.origin.y) / ray.direction.y;
+            if t.is_finite() && t > 0.0 {
+                let hit = ray.origin + ray.direction * t;
+                let x2 = (hit.x / TILE_SIZE).floor() as i32;
+                let y2 = (hit.z / TILE_SIZE).floor() as i32;
+
+                // Prefer elevated if it resolves to the same tile coords
+                if x2 == tx && y2 == ty {
+                    state.hover = Some((x2 as u32, y2 as u32));
+                    return;
+                }
             }
+
+            // --- Fallback to flat tile
+            state.hover = Some((tx as u32, ty as u32));
+            return;
         }
     }
+
+    // --- Nothing hit
     state.hover = None;
 }
 
