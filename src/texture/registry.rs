@@ -52,7 +52,7 @@ impl TerrainTextureRegistry {
             base_color.to_string(),
             normal.map(|s| s.to_string()),
             roughness.map(|s| s.to_string()),
-            specular.map(|s| s.to_string())
+            specular.map(|s| s.to_string()),
         );
 
         self.register_loaded(TerrainTextureEntry {
@@ -73,5 +73,9 @@ impl TerrainTextureRegistry {
         self.lookup
             .get(&tile_type)
             .and_then(|index| self.entries.get(*index))
+    }
+
+    pub fn diffuse_texture(&self, tile_type: TileType) -> Option<Handle<Image>> {
+        self.get(tile_type).map(|entry| entry.icon.clone())
     }
 }

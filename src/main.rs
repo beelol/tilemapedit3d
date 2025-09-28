@@ -4,21 +4,25 @@ mod editor;
 mod grid_visual;
 mod io;
 mod terrain;
+mod terrain_render;
 mod texture;
 mod types;
 mod ui;
 
+use bevy::pbr::MaterialPlugin;
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 use camera::CameraPlugin;
 use controls::ControlsPlugin;
 use editor::EditorPlugin;
+use terrain_render::TerrainMaterial;
 use texture::TexturePlugin;
 use ui::UiPlugin;
 
 fn main() {
     App::new()
         .add_plugins((DefaultPlugins, EguiPlugin))
+        .add_plugins(MaterialPlugin::<TerrainMaterial>::default())
         .add_plugins((
             TexturePlugin,
             CameraPlugin,
