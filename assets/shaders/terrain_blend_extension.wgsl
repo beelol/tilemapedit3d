@@ -33,22 +33,13 @@ var terrain_splatmap_sampler: sampler;
 @group(2) @binding(103)
 var terrain_layer0: texture_2d<f32>;
 @group(2) @binding(104)
-var terrain_layer0_sampler: sampler;
-
-@group(2) @binding(105)
 var terrain_layer1: texture_2d<f32>;
-@group(2) @binding(106)
-var terrain_layer1_sampler: sampler;
-
-@group(2) @binding(107)
+@group(2) @binding(105)
 var terrain_layer2: texture_2d<f32>;
-@group(2) @binding(108)
-var terrain_layer2_sampler: sampler;
-
-@group(2) @binding(109)
+@group(2) @binding(106)
 var terrain_layer3: texture_2d<f32>;
-@group(2) @binding(110)
-var terrain_layer3_sampler: sampler;
+@group(2) @binding(107)
+var terrain_layer_sampler: sampler;
 
 fn splat_weights(world_position: vec3<f32>) -> vec4<f32> {
     let splat_uv = vec2<f32>(
@@ -62,16 +53,16 @@ fn splat_weights(world_position: vec3<f32>) -> vec4<f32> {
 
 fn blended_color(weights: vec4<f32>, uv: vec2<f32>) -> vec4<f32> {
     var color = vec4<f32>(0.0);
-    color += textureSample(terrain_layer0, terrain_layer0_sampler, uv)
+    color += textureSample(terrain_layer0, terrain_layer_sampler, uv)
         * terrain_params.layer_tints[0]
         * weights.x;
-    color += textureSample(terrain_layer1, terrain_layer1_sampler, uv)
+    color += textureSample(terrain_layer1, terrain_layer_sampler, uv)
         * terrain_params.layer_tints[1]
         * weights.y;
-    color += textureSample(terrain_layer2, terrain_layer2_sampler, uv)
+    color += textureSample(terrain_layer2, terrain_layer_sampler, uv)
         * terrain_params.layer_tints[2]
         * weights.z;
-    color += textureSample(terrain_layer3, terrain_layer3_sampler, uv)
+    color += textureSample(terrain_layer3, terrain_layer_sampler, uv)
         * terrain_params.layer_tints[3]
         * weights.w;
     return color;

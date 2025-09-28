@@ -3,6 +3,7 @@ use bevy::pbr::{ExtendedMaterial, MaterialExtension, MaterialPlugin};
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use bevy::render::render_resource::{AsBindGroup, ShaderRef, ShaderType};
+use bevy::render::texture::ImageSampler;
 
 use crate::types::TERRAIN_LAYERS;
 
@@ -29,21 +30,20 @@ pub struct TerrainBlendParams {
 pub struct TerrainBlendExtension {
     #[uniform(100)]
     pub params: TerrainBlendParams,
-    #[texture(101)]
-    #[sampler(102)]
+    #[texture(101, sampler = "splatmap_sampler")]
     pub splatmap: Handle<Image>,
-    #[texture(103)]
-    #[sampler(104)]
+    #[sampler(102)]
+    pub splatmap_sampler: ImageSampler,
+    #[texture(103, sampler = "layer_sampler")]
     pub layer0: Handle<Image>,
-    #[texture(105)]
-    #[sampler(106)]
+    #[texture(104, sampler = "layer_sampler")]
     pub layer1: Handle<Image>,
-    #[texture(107)]
-    #[sampler(108)]
+    #[texture(105, sampler = "layer_sampler")]
     pub layer2: Handle<Image>,
-    #[texture(109)]
-    #[sampler(110)]
+    #[texture(106, sampler = "layer_sampler")]
     pub layer3: Handle<Image>,
+    #[sampler(107)]
+    pub layer_sampler: ImageSampler,
 }
 
 impl TerrainBlendExtension {
