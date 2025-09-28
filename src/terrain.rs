@@ -1,4 +1,4 @@
-use crate::types::{TILE_HEIGHT, TILE_SIZE, TileKind, TileMap};
+use crate::types::{RampDirection, TILE_HEIGHT, TILE_SIZE, TileKind, TileMap};
 use bevy::prelude::*;
 use bevy::render::mesh::Indices;
 use bevy::render::render_asset::RenderAssetUsages;
@@ -8,6 +8,17 @@ enum Direction {
     East,
     South,
     West,
+}
+
+impl From<RampDirection> for Direction {
+    fn from(value: RampDirection) -> Self {
+        match value {
+            RampDirection::North => Direction::North,
+            RampDirection::East => Direction::East,
+            RampDirection::South => Direction::South,
+            RampDirection::West => Direction::West,
+        }
+    }
 }
 
 pub const CORNER_NW: usize = 0;
@@ -21,7 +32,9 @@ pub fn tile_corner_heights(map: &TileMap, x: u32, y: u32) -> [f32; 4] {
     let mut corners = [base; 4];
 
     if tile.kind == TileKind::Ramp {
-        if let Some((dir, neighbor_height)) = find_ramp_target(map, x, y, base) {
+        if let Some((dir, neighbor_height)) =
+            find_ramp_target(map, x, y, base, tile.ramp_orientation)
+        {
             match dir {
                 Direction::North => {
                     corners[CORNER_NW] = neighbor_height;
@@ -186,8 +199,16 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
     mesh
 }
 
-fn find_ramp_target(map: &TileMap, x: u32, y: u32, base: f32) -> Option<(Direction, f32)> {
-    let mut result: Option<(Direction, f32)> = None;
+fn find_ramp_target(
+    map: &TileMap,
+    x: u32,
+    y: u32,
+    base: f32,
+    orientation: Option<RampDirection>,
+) -> Option<(Direction, f32)> {
+    let mut oriented_target: Option<(Direction, f32)> = None;
+    let mut best: Option<(Direction, f32, f32)> = None;
+    let oriented_direction = orientation.map(Direction::from);
     let mut consider = |dir: Direction, nx: i32, ny: i32| {
         if nx < 0 || ny < 0 {
             return;
@@ -198,12 +219,14 @@ fn find_ramp_target(map: &TileMap, x: u32, y: u32, base: f32) -> Option<(Directi
         }
         let neighbor = map.get(ux, uy);
         let h = neighbor.elevation as f32 * TILE_HEIGHT;
-        if h < base {
-            match &result {
-                Some((_, existing)) if *existing <= h => {}
-                _ => {
-                    result = Some((dir, h));
-                }
+        if h > base {
+            if oriented_direction == Some(dir) {
+                oriented_target = Some((dir, h));
+            }
+            let diff = h - base;
+            match &best {
+                Some((_, _, current_diff)) if *current_diff <= diff => {}
+                _ => best = Some((dir, h, diff)),
             }
         }
     };
@@ -212,7 +235,7 @@ fn find_ramp_target(map: &TileMap, x: u32, y: u32, base: f32) -> Option<(Directi
     consider(Direction::South, x as i32, y as i32 + 1);
     consider(Direction::West, x as i32 - 1, y as i32);
     consider(Direction::East, x as i32 + 1, y as i32);
-    result
+    oriented_target.or_else(|| best.map(|(dir, height, _)| (dir, height)))
 }
 
 fn push_quad(

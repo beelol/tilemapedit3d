@@ -65,12 +65,15 @@ fn spawn_editor_assets(
     ));
 
     let terrain_material = mats.add(StandardMaterial {
-        base_color_texture: Some(asset_server.load("textures/terrain/rocky_terrain_02_diff_1k.png")),
-        normal_map_texture: Some(asset_server.load("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr")),
+        base_color_texture: Some(
+            asset_server.load("textures/terrain/rocky_terrain_02_diff_1k.png"),
+        ),
+        normal_map_texture: Some(
+            asset_server.load("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
+        ),
         metallic: 0.0,
         ..default()
     });
-
 
     commands.spawn(PbrBundle {
         mesh: terrain_mesh.clone(),
@@ -153,6 +156,11 @@ fn paint_tiles(
             let current = state_ref.map.get(x, y);
             if current.kind != kind || current.elevation != elevation {
                 let tile_type = current.tile_type.clone();
+                let ramp_orientation = if kind == TileKind::Ramp {
+                    current.ramp_orientation
+                } else {
+                    None
+                };
                 state_ref.map.set(
                     x,
                     y,
@@ -162,6 +170,7 @@ fn paint_tiles(
                         tile_type,
                         x,
                         y,
+                        ramp_orientation,
                     },
                 );
                 state_ref.map_dirty = true;
