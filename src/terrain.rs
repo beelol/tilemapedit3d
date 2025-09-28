@@ -1,13 +1,25 @@
-use crate::types::{TILE_HEIGHT, TILE_SIZE, TileKind, TileMap};
+use crate::types::{Orientation4, TILE_HEIGHT, TILE_SIZE, TileKind, TileMap};
 use bevy::prelude::*;
 use bevy::render::mesh::Indices;
 use bevy::render::render_asset::RenderAssetUsages;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Direction {
     North,
     East,
     South,
     West,
+}
+
+impl From<Orientation4> for Direction {
+    fn from(value: Orientation4) -> Self {
+        match value {
+            Orientation4::North => Direction::North,
+            Orientation4::East => Direction::East,
+            Orientation4::South => Direction::South,
+            Orientation4::West => Direction::West,
+        }
+    }
 }
 
 const CORNER_NW: usize = 0;
@@ -33,7 +45,9 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
             let mut corners = [base; 4];
 
             if tile.kind == TileKind::Ramp {
-                if let Some((dir, neighbor_height)) = find_ramp_target(map, x, y, base) {
+                if let Some((dir, neighbor_height)) =
+                    find_ramp_target(map, x, y, base, tile.orientation)
+                {
                     match dir {
                         Direction::North => {
                             corners[CORNER_NW] = neighbor_height;
@@ -182,33 +196,73 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
     mesh
 }
 
-fn find_ramp_target(map: &TileMap, x: u32, y: u32, base: f32) -> Option<(Direction, f32)> {
-    let mut result: Option<(Direction, f32)> = None;
-    let mut consider = |dir: Direction, nx: i32, ny: i32| {
+fn neighbor_offset(dir: Direction) -> (i32, i32) {
+    match dir {
+        Direction::North => (0, -1),
+        Direction::East => (1, 0),
+        Direction::South => (0, 1),
+        Direction::West => (-1, 0),
+    }
+}
+
+fn find_ramp_target(
+    map: &TileMap,
+    x: u32,
+    y: u32,
+    base: f32,
+    orientation: Orientation4,
+) -> Option<(Direction, f32)> {
+    const EPS: f32 = 1e-4;
+
+    let mut consider = |dir: Direction| -> Option<(Direction, f32, f32)> {
+        let (dx, dy) = neighbor_offset(dir);
+        let nx = x as i32 + dx;
+        let ny = y as i32 + dy;
         if nx < 0 || ny < 0 {
-            return;
+            return None;
         }
         let (ux, uy) = (nx as u32, ny as u32);
         if ux >= map.width || uy >= map.height {
-            return;
+            return None;
         }
         let neighbor = map.get(ux, uy);
         let h = neighbor.elevation as f32 * TILE_HEIGHT;
-        if h < base {
-            match &result {
-                Some((_, existing)) if *existing <= h => {}
-                _ => {
-                    result = Some((dir, h));
-                }
-            }
+        if h > base {
+            let diff = h - base;
+            Some((dir, h, diff))
+        } else {
+            None
         }
     };
 
-    consider(Direction::North, x as i32, y as i32 - 1);
-    consider(Direction::South, x as i32, y as i32 + 1);
-    consider(Direction::West, x as i32 - 1, y as i32);
-    consider(Direction::East, x as i32 + 1, y as i32);
-    result
+    let preferred: Direction = orientation.into();
+    if let Some((dir, height, _)) = consider(preferred) {
+        return Some((dir, height));
+    }
+
+    let mut best: Option<(Direction, f32, f32)> = None;
+    for dir in [
+        Direction::North,
+        Direction::East,
+        Direction::South,
+        Direction::West,
+    ] {
+        if dir == preferred {
+            continue;
+        }
+        if let Some(candidate) = consider(dir) {
+            match best {
+                None => best = Some(candidate),
+                Some((_, _, best_diff)) => {
+                    if candidate.2 + EPS < best_diff {
+                        best = Some(candidate);
+                    }
+                }
+            }
+        }
+    }
+
+    best.map(|(dir, height, _)| (dir, height))
 }
 
 fn push_quad(

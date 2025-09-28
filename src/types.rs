@@ -2,7 +2,30 @@ use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Debug, Encode, Decode)]
-pub enum TileKind { Floor, Ramp }
+pub enum TileKind {
+    Floor,
+    Ramp,
+}
+
+#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Debug, Encode, Decode, Default)]
+pub enum Orientation4 {
+    #[default]
+    North,
+    East,
+    South,
+    West,
+}
+
+impl Orientation4 {
+    pub fn next(self) -> Self {
+        match self {
+            Orientation4::North => Orientation4::East,
+            Orientation4::East => Orientation4::South,
+            Orientation4::South => Orientation4::West,
+            Orientation4::West => Orientation4::North,
+        }
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Encode, Decode)]
 pub struct Tile {
@@ -10,7 +33,13 @@ pub struct Tile {
     pub tile_type: TileType,
     pub x: u32,
     pub y: u32,
-    pub elevation: i8,   // can be negative for underwater, or positive for cliffs
+    pub elevation: i8, // can be negative for underwater, or positive for cliffs
+    #[serde(default)]
+    #[bincode(default)]
+    pub orientation: Orientation4,
+    #[serde(default)]
+    #[bincode(default)]
+    pub manual_orientation: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Encode, Decode)]
@@ -31,17 +60,33 @@ pub struct TileMap {
 impl TileMap {
     pub fn new(w: u32, h: u32) -> Self {
         Self {
-            width: w, height: h,
-            tiles: vec![Tile { kind: TileKind::Floor, tile_type: TileType::Grass, elevation: 0, x: 0, y: 0}; (w*h) as usize],
+            width: w,
+            height: h,
+            tiles: vec![
+                Tile {
+                    kind: TileKind::Floor,
+                    tile_type: TileType::Grass,
+                    elevation: 0,
+                    x: 0,
+                    y: 0,
+                    orientation: Orientation4::North,
+                    manual_orientation: false,
+                };
+                (w * h) as usize
+            ],
         }
     }
-    pub fn idx(&self, x:u32,y:u32)->usize { (y*self.width + x) as usize }
-    pub fn get(&self, x:u32,y:u32)->&Tile { &self.tiles[self.idx(x,y)] }
-    pub fn set(&mut self, x:u32,y:u32, t:Tile){
+    pub fn idx(&self, x: u32, y: u32) -> usize {
+        (y * self.width + x) as usize
+    }
+    pub fn get(&self, x: u32, y: u32) -> &Tile {
+        &self.tiles[self.idx(x, y)]
+    }
+    pub fn set(&mut self, x: u32, y: u32, t: Tile) {
         let i = self.idx(x, y);
         self.tiles[i] = t;
     }
 }
 
-pub const TILE_SIZE: f32 = 1.0;     // world units per tile
-pub const TILE_HEIGHT: f32 = 1.0;   // height per elevation step
+pub const TILE_SIZE: f32 = 1.0; // world units per tile
+pub const TILE_HEIGHT: f32 = 1.0; // height per elevation step
