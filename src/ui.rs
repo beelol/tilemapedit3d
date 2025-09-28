@@ -66,6 +66,14 @@ fn ui_panel(
             }
 
             ui.separator();
+            let texture_slider = egui::Slider::new(&mut state.uv_scale, 0.5..=16.0)
+                .logarithmic(true)
+                .text("Texture Scale");
+            if ui.add(texture_slider).changed() {
+                state.map_dirty = true;
+            }
+
+            ui.separator();
             if ui.button("Save").clicked() {
                 save_map("map.json", &state.map).ok();
             }

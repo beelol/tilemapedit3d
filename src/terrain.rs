@@ -1,10 +1,14 @@
-use std::collections::HashMap;
-
-use crate::types::{RampDirection, TILE_HEIGHT, TILE_SIZE, TileKind, TileMap, TileType};
+use crate::types::{
+    RampDirection, TERRAIN_LAYERS, TILE_HEIGHT, TILE_SIZE, TileKind, TileMap, TileType,
+};
 use bevy::prelude::*;
 use bevy::render::mesh::Indices;
 use bevy::render::render_asset::RenderAssetUsages;
-use bevy::render::render_resource::PrimitiveTopology;
+use bevy::render::render_resource::{
+    AddressMode, Extent3d, FilterMode, PrimitiveTopology, SamplerDescriptor, TextureDimension,
+    TextureFormat, TextureUsages,
+};
+use bevy::render::texture::ImageSampler;
 
 pub const CORNER_NW: usize = 0;
 pub const CORNER_NE: usize = 1;
@@ -57,11 +61,9 @@ pub fn empty_mesh() -> Mesh {
     )
 }
 
-pub fn build_map_meshes(map: &TileMap) -> HashMap<TileType, Mesh> {
-    let mut result = HashMap::new();
-
+pub fn build_terrain_mesh(map: &TileMap) -> Mesh {
     if map.width == 0 || map.height == 0 {
-        return result;
+        return empty_mesh();
     }
 
     let mut corner_cache = vec![[0.0f32; 4]; (map.width * map.height) as usize];
@@ -72,29 +74,23 @@ pub fn build_map_meshes(map: &TileMap) -> HashMap<TileType, Mesh> {
         }
     }
 
-    let mut buffers: HashMap<TileType, MeshBuffers> = HashMap::new();
+    let mut buffer = MeshBuffers::new();
 
     for y in 0..map.height {
         for x in 0..map.width {
             let idx = map.idx(x, y);
-            let tile = map.get(x, y);
             let corners = corner_cache[idx];
             let x0 = x as f32 * TILE_SIZE;
             let x1 = x0 + TILE_SIZE;
             let z0 = y as f32 * TILE_SIZE;
             let z1 = z0 + TILE_SIZE;
 
-            let buffer = buffers.entry(tile.tile_type).or_default();
-
             let nw = Vec3::new(x0, corners[CORNER_NW], z0);
             let ne = Vec3::new(x1, corners[CORNER_NE], z0);
             let sw = Vec3::new(x0, corners[CORNER_SW], z1);
             let se = Vec3::new(x1, corners[CORNER_SE], z1);
 
-            buffer.push_quad(
-                [nw, sw, se, ne],
-                [[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]],
-            );
+            buffer.push_top_quad([nw, sw, se, ne]);
 
             let (bnw, bne) = if y > 0 {
                 let neighbor = corner_cache[map.idx(x, y - 1)];
@@ -154,11 +150,64 @@ pub fn build_map_meshes(map: &TileMap) -> HashMap<TileType, Mesh> {
         }
     }
 
-    for (tile_type, buffer) in buffers {
-        result.insert(tile_type, buffer.into_mesh());
+    buffer.into_mesh()
+}
+
+pub fn build_splatmap(map: &TileMap) -> Image {
+    if map.width == 0 || map.height == 0 {
+        let mut image = Image::new_fill(
+            Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            &[255, 0, 0, 0],
+            TextureFormat::Rgba8Unorm,
+        );
+        configure_splatmap_image(&mut image);
+        return image;
     }
 
-    result
+    let mut data = vec![0u8; (map.width * map.height * 4) as usize];
+    for y in 0..map.height {
+        for x in 0..map.width {
+            let tile = map.get(x, y);
+            let pixel_index = ((y * map.width + x) * 4) as usize;
+            let layer_index = TERRAIN_LAYERS
+                .iter()
+                .position(|layer| *layer == tile.tile_type)
+                .unwrap_or(0);
+            data[pixel_index + layer_index] = 255;
+        }
+    }
+
+    let mut image = Image::new_fill(
+        Extent3d {
+            width: map.width,
+            height: map.height,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        &data,
+        TextureFormat::Rgba8Unorm,
+    );
+    configure_splatmap_image(&mut image);
+    image
+}
+
+fn configure_splatmap_image(image: &mut Image) {
+    image.texture_descriptor.usage =
+        TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::COPY_SRC;
+    image.sampler_descriptor = ImageSampler::Descriptor(SamplerDescriptor {
+        address_mode_u: AddressMode::ClampToEdge,
+        address_mode_v: AddressMode::ClampToEdge,
+        address_mode_w: AddressMode::ClampToEdge,
+        mag_filter: FilterMode::Linear,
+        min_filter: FilterMode::Linear,
+        mipmap_filter: FilterMode::Linear,
+        ..Default::default()
+    });
 }
 
 fn find_ramp_target(map: &TileMap, x: u32, y: u32, base: f32) -> Option<(RampDirection, f32)> {
@@ -208,7 +257,12 @@ struct MeshBuffers {
 }
 
 impl MeshBuffers {
-    fn push_quad(&mut self, verts: [Vec3; 4], tex: [[f32; 2]; 4]) {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn push_top_quad(&mut self, verts: [Vec3; 4]) {
+        let tex = verts.map(top_uv);
         push_quad(
             &mut self.positions,
             &mut self.normals,
@@ -300,6 +354,17 @@ fn push_triangle(
     *next_index += 3;
 }
 
+fn top_uv(vertex: Vec3) -> [f32; 2] {
+    [vertex.x, vertex.z]
+}
+
+fn side_uv(vertex: Vec3, direction: RampDirection) -> [f32; 2] {
+    match direction {
+        RampDirection::North | RampDirection::South => [vertex.x, vertex.y],
+        RampDirection::West | RampDirection::East => [vertex.z, vertex.y],
+    }
+}
+
 fn add_side_face(
     positions: &mut Vec<[f32; 3]>,
     normals: &mut Vec<[f32; 3]>,
@@ -317,24 +382,8 @@ fn add_side_face(
         return;
     }
 
-    let (verts, tex) = match direction {
-        RampDirection::North => (
-            [top_a, top_b, bottom_b, bottom_a],
-            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
-        ),
-        RampDirection::South => (
-            [top_a, top_b, bottom_b, bottom_a],
-            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
-        ),
-        RampDirection::West => (
-            [top_a, top_b, bottom_b, bottom_a],
-            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
-        ),
-        RampDirection::East => (
-            [top_a, top_b, bottom_b, bottom_a],
-            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
-        ),
-    };
+    let verts = [top_a, top_b, bottom_b, bottom_a];
+    let tex = verts.map(|v| side_uv(v, direction));
 
     push_quad(positions, normals, uvs, indices, next_index, verts, tex);
 }

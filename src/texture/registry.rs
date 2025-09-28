@@ -1,17 +1,17 @@
 use std::collections::HashMap;
 
+use bevy::math::Vec4;
 use bevy::prelude::*;
 
-use crate::types::TileType;
-
-use super::material::{self, TerrainMaterialHandles};
+use crate::types::{TERRAIN_LAYERS, TileType};
 
 #[derive(Debug, Clone)]
 pub struct TerrainTextureEntry {
     pub tile_type: TileType,
     pub name: String,
     pub icon: Handle<Image>,
-    pub material: Handle<StandardMaterial>,
+    pub base_color: Handle<Image>,
+    pub tint: Color,
 }
 
 #[derive(Resource, Default)]
@@ -36,33 +36,36 @@ impl TerrainTextureRegistry {
         tile_type: TileType,
         name: impl Into<String>,
         asset_server: &AssetServer,
-        materials: &mut Assets<StandardMaterial>,
         base_color: &str,
-        normal: Option<&str>,
-        roughness: Option<&str>,
-        specular: Option<&str>,
-    ) -> Handle<StandardMaterial> {
-        let TerrainMaterialHandles {
-            material,
-            base_color: icon,
-            ..
-        } = material::load_terrain_material(
-            asset_server,
-            materials,
-            base_color.to_string(),
-            normal.map(|s| s.to_string()),
-            roughness.map(|s| s.to_string()),
-            specular.map(|s| s.to_string())
-        );
+        tint: Color,
+    ) -> Handle<Image> {
+        let base_color_handle: Handle<Image> = asset_server.load(base_color);
 
         self.register_loaded(TerrainTextureEntry {
             tile_type,
             name: name.into(),
-            icon,
-            material: material.clone(),
+            icon: base_color_handle.clone(),
+            base_color: base_color_handle.clone(),
+            tint,
         });
 
-        material
+        base_color_handle
+    }
+
+    pub fn register_from_handle(
+        &mut self,
+        tile_type: TileType,
+        name: impl Into<String>,
+        base_color: Handle<Image>,
+        tint: Color,
+    ) {
+        self.register_loaded(TerrainTextureEntry {
+            tile_type,
+            name: name.into(),
+            icon: base_color.clone(),
+            base_color,
+            tint,
+        });
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &TerrainTextureEntry> {
@@ -73,5 +76,24 @@ impl TerrainTextureRegistry {
         self.lookup
             .get(&tile_type)
             .and_then(|index| self.entries.get(*index))
+    }
+
+    pub fn layer_textures(
+        &self,
+    ) -> (
+        [Handle<Image>; TERRAIN_LAYERS.len()],
+        [Vec4; TERRAIN_LAYERS.len()],
+    ) {
+        let mut handles: [Handle<Image>; TERRAIN_LAYERS.len()] = Default::default();
+        let mut tints = [Vec4::ONE; TERRAIN_LAYERS.len()];
+
+        for (index, layer) in TERRAIN_LAYERS.iter().enumerate() {
+            if let Some(entry) = self.get(*layer) {
+                handles[index] = entry.base_color.clone();
+                tints[index] = Vec4::from_array(entry.tint.as_linear_rgba_f32());
+            }
+        }
+
+        (handles, tints)
     }
 }
