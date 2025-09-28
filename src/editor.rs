@@ -14,6 +14,7 @@ impl Plugin for EditorPlugin {
                 (
                     update_hover,
                     paint_tiles,
+                    rotate_ramps,
                     rebuild_terrain_mesh,
                     draw_hover_highlight,
                 ),
@@ -21,9 +22,24 @@ impl Plugin for EditorPlugin {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum EditorTool {
+    Paint(TileKind),
+    RotateRamp,
+}
+
+impl EditorTool {
+    fn paint_kind(self) -> Option<TileKind> {
+        match self {
+            EditorTool::Paint(kind) => Some(kind),
+            EditorTool::RotateRamp => None,
+        }
+    }
+}
+
 #[derive(Resource)]
 pub struct EditorState {
-    pub current_kind: TileKind,
+    pub current_tool: EditorTool,
     pub current_elev: i8, // -1..3
     pub hover: Option<(u32, u32)>,
     pub map: TileMap,
@@ -32,7 +48,7 @@ pub struct EditorState {
 impl Default for EditorState {
     fn default() -> Self {
         Self {
-            current_kind: TileKind::Floor,
+            current_tool: EditorTool::Paint(TileKind::Floor),
             current_elev: 0,
             hover: None,
             map: TileMap::new(64, 64),
@@ -141,15 +157,19 @@ fn paint_tiles(
     if egui.ctx_mut().wants_pointer_input() {
         return;
     }
+
+    let Some(kind) = state.current_tool.paint_kind() else {
+        return;
+    };
+
     if buttons.pressed(MouseButton::Left) {
         if let Some((x, y)) = state.hover {
-            let kind = state.current_kind;
             let elevation = state.current_elev;
             let state_ref = &mut *state;
             let current = state_ref.map.get(x, y);
             if current.kind != kind || current.elevation != elevation {
                 let tile_type = current.tile_type.clone();
-                let ramp_orientation = if kind == TileKind::Ramp {
+                let ramp_orientation = if matches!(current.kind, TileKind::Ramp) {
                     current.ramp_orientation
                 } else {
                     None
@@ -170,6 +190,45 @@ fn paint_tiles(
             }
         }
     }
+}
+
+fn rotate_ramps(
+    buttons: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut state: ResMut<EditorState>,
+    mut egui: EguiContexts,
+) {
+    if egui.ctx_mut().wants_pointer_input() || egui.ctx_mut().wants_keyboard_input() {
+        return;
+    }
+
+    let rotate_via_tool = matches!(state.current_tool, EditorTool::RotateRamp)
+        && buttons.just_pressed(MouseButton::Left);
+    let rotate_via_shortcut =
+        buttons.just_pressed(MouseButton::Right) || keys.just_pressed(KeyCode::KeyR);
+
+    if !rotate_via_tool && !rotate_via_shortcut {
+        return;
+    }
+
+    let Some((x, y)) = state.hover else {
+        return;
+    };
+
+    let idx = state.map.idx(x, y);
+    let tile = &mut state.map.tiles[idx];
+    if tile.kind != TileKind::Ramp {
+        return;
+    }
+
+    tile.ramp_orientation = match tile.ramp_orientation {
+        None => Some(RampDirection::North),
+        Some(RampDirection::North) => Some(RampDirection::East),
+        Some(RampDirection::East) => Some(RampDirection::South),
+        Some(RampDirection::South) => Some(RampDirection::West),
+        Some(RampDirection::West) => None,
+    };
+    state.map_dirty = true;
 }
 
 fn rebuild_terrain_mesh(

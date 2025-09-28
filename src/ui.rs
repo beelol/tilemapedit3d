@@ -1,3 +1,4 @@
+use crate::editor::{EditorState, EditorTool};
 use crate::io::{load_map, save_map};
 use crate::types::*;
 use bevy::prelude::*;
@@ -10,33 +11,25 @@ impl Plugin for UiPlugin {
     }
 }
 
-fn ui_panel(mut egui_ctx: EguiContexts, mut state: ResMut<crate::editor::EditorState>) {
+fn ui_panel(mut egui_ctx: EguiContexts, mut state: ResMut<EditorState>) {
     egui::TopBottomPanel::top("toolbar").show(egui_ctx.ctx_mut(), |ui| {
         ui.horizontal(|ui| {
             ui.label("Tool:");
-            ui.selectable_value(&mut state.current_kind, TileKind::Floor, "Floor");
-            ui.selectable_value(&mut state.current_kind, TileKind::Ramp, "Ramp");
-
-            let can_rotate = state
-                .hover
-                .map(|(x, y)| state.map.get(x, y).kind == TileKind::Ramp)
-                .unwrap_or(false);
-            if ui
-                .add_enabled(can_rotate, egui::Button::new("Rotate Ramp"))
-                .clicked()
-            {
-                if let Some((x, y)) = state.hover {
-                    let idx = state.map.idx(x, y);
-                    let tile = &mut state.map.tiles[idx];
-                    if tile.kind == TileKind::Ramp {
-                        tile.ramp_orientation = match tile.ramp_orientation {
-                            None => Some(RampDirection::North),
-                            Some(dir) => dir.next(),
-                        };
-                        state.map_dirty = true;
-                    }
-                }
-            }
+            ui.selectable_value(
+                &mut state.current_tool,
+                EditorTool::Paint(TileKind::Floor),
+                "Paint Floor",
+            );
+            ui.selectable_value(
+                &mut state.current_tool,
+                EditorTool::Paint(TileKind::Ramp),
+                "Paint Ramp",
+            );
+            ui.selectable_value(
+                &mut state.current_tool,
+                EditorTool::RotateRamp,
+                "Rotate Ramp",
+            );
 
             ui.separator();
             ui.label("Elevation:");

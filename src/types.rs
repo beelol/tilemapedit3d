@@ -15,17 +15,6 @@ pub enum RampDirection {
     West,
 }
 
-impl RampDirection {
-    pub fn next(self) -> Option<Self> {
-        match self {
-            RampDirection::North => Some(RampDirection::East),
-            RampDirection::East => Some(RampDirection::South),
-            RampDirection::South => Some(RampDirection::West),
-            RampDirection::West => None,
-        }
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone, Encode, Decode)]
 pub struct Tile {
     pub kind: TileKind,
