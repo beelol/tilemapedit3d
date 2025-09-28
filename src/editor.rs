@@ -1,6 +1,5 @@
 use crate::terrain;
 use crate::types::*;
-use bevy::gizmos::GizmoConfigStore;
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy_egui::EguiContexts;
