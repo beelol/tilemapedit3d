@@ -1,6 +1,5 @@
 use crate::types::TileMap;
-use bincode::{config, decode_from_slice, encode_to_vec};
-use serde::{Deserialize, Serialize};
+use bincode::{config, serde::decode_from_slice, serde::encode_to_vec};
 
 const KEY: u8 = 0xAA;
 

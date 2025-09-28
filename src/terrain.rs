@@ -214,7 +214,7 @@ fn find_ramp_target(
 ) -> Option<(Direction, f32)> {
     const EPS: f32 = 1e-4;
 
-    let mut consider = |dir: Direction| -> Option<(Direction, f32, f32)> {
+    let consider = |dir: Direction| -> Option<(Direction, f32, f32)> {
         let (dx, dy) = neighbor_offset(dir);
         let nx = x as i32 + dx;
         let ny = y as i32 + dy;

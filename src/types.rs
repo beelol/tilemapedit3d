@@ -1,13 +1,12 @@
-use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Debug, Encode, Decode)]
+#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Debug)]
 pub enum TileKind {
     Floor,
     Ramp,
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Debug, Encode, Decode, Default)]
+#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Debug, Default)]
 pub enum Orientation4 {
     #[default]
     North,
@@ -27,7 +26,7 @@ impl Orientation4 {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Encode, Decode)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Tile {
     pub kind: TileKind,
     pub tile_type: TileType,
@@ -35,14 +34,12 @@ pub struct Tile {
     pub y: u32,
     pub elevation: i8, // can be negative for underwater, or positive for cliffs
     #[serde(default)]
-    #[bincode(default)]
     pub orientation: Orientation4,
     #[serde(default)]
-    #[bincode(default)]
     pub manual_orientation: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Encode, Decode)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum TileType {
     Grass,
     Dirt,
@@ -50,7 +47,7 @@ pub enum TileType {
     Water,
 }
 
-#[derive(Serialize, Deserialize, Debug, Encode, Decode)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TileMap {
     pub width: u32,
     pub height: u32,

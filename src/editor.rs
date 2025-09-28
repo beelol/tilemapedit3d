@@ -60,12 +60,12 @@ fn spawn_editor_assets(
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let hover = mats.add(StandardMaterial {
-        base_color: Color::rgba(0.0, 1.0, 0.0, 0.25),
+        base_color: Color::srgba(0.0, 1.0, 0.0, 0.25),
         unlit: true,
         ..default()
     });
     let terrain_material = mats.add(StandardMaterial {
-        base_color: Color::rgb(0.35, 0.55, 0.2),
+        base_color: Color::srgb(0.35, 0.55, 0.2),
         perceptual_roughness: 0.8,
         metallic: 0.0,
         ..default()
