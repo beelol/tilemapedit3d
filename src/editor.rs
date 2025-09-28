@@ -1,7 +1,7 @@
 use crate::terrain;
+use crate::texture::registry::TerrainTextureRegistry;
 use crate::types::*;
 use bevy::prelude::*;
-use bevy::render::render_asset::RenderAssetUsages;
 use bevy_egui::EguiContexts;
 
 pub struct EditorPlugin;
@@ -35,6 +35,7 @@ pub struct EditorState {
     pub current_tool: EditorTool,
     pub current_kind: TileKind,
     pub current_elev: i8, // -1..3
+    pub current_texture: TileType,
     pub hover: Option<(u32, u32)>,
     pub map: TileMap,
     pub map_dirty: bool,
@@ -45,6 +46,7 @@ impl Default for EditorState {
             current_tool: EditorTool::Paint,
             current_kind: TileKind::Floor,
             current_elev: 0,
+            current_texture: TileType::default(),
             hover: None,
             map: TileMap::new(64, 64),
             map_dirty: true,
@@ -54,7 +56,20 @@ impl Default for EditorState {
 
 #[derive(Resource)]
 struct TerrainVisual {
+    layers: std::collections::HashMap<TileType, TerrainLayer>,
+}
+
+impl Default for TerrainVisual {
+    fn default() -> Self {
+        Self {
+            layers: std::collections::HashMap::new(),
+        }
+    }
+}
+
+struct TerrainLayer {
     mesh: Handle<Mesh>,
+    _entity: Entity,
 }
 
 #[derive(Default, Reflect, GizmoConfigGroup)]
@@ -71,38 +86,44 @@ fn spawn_editor_assets(
     mut mats: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     asset_server: Res<AssetServer>,
+    mut textures: ResMut<TerrainTextureRegistry>,
 ) {
-    let terrain_material = mats.add(StandardMaterial {
-        base_color: Color::rgb(0.35, 0.55, 0.2),
-        perceptual_roughness: 0.8,
-        metallic: 0.0,
-        ..default()
-    });
+    textures.load_and_register(
+        TileType::Grass,
+        "Rocky Terrain",
+        &asset_server,
+        &mut mats,
+        "textures/terrain/rocky_terrain_02_diff_1k.png",
+        Some("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
+        // Some("textures/terrain/rocky_terrain_02_rough_1k.exr"),
+        None,
+        // Some("textures/terrain/rocky_terrain_02_spec_1k.png"),
+        None,
+    );
 
-    let terrain_mesh = meshes.add(Mesh::new(
-        bevy::render::render_resource::PrimitiveTopology::TriangleList,
-        RenderAssetUsages::default(),
-    ));
+    let mut visual = TerrainVisual::default();
 
-    let terrain_material = mats.add(StandardMaterial {
-        base_color_texture: Some(
-            asset_server.load("textures/terrain/rocky_terrain_02_diff_1k.png"),
-        ),
-        normal_map_texture: Some(
-            asset_server.load("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
-        ),
-        metallic: 0.0,
-        ..default()
-    });
+    for entry in textures.iter() {
+        let mesh = meshes.add(terrain::empty_mesh());
+        let entity = commands
+            .spawn(PbrBundle {
+                mesh: mesh.clone(),
+                material: entry.material.clone(),
+                transform: Transform::default(),
+                ..default()
+            })
+            .id();
 
-    commands.spawn(PbrBundle {
-        mesh: terrain_mesh.clone(),
-        material: terrain_material.clone(),
-        transform: Transform::default(),
-        ..default()
-    });
+        visual.layers.insert(
+            entry.tile_type,
+            TerrainLayer {
+                mesh,
+                _entity: entity,
+            },
+        );
+    }
 
-    commands.insert_resource(TerrainVisual { mesh: terrain_mesh });
+    commands.insert_resource(visual);
 }
 
 // Raycast to ground plane at chosen elevation (use current_elev for edit layer)
@@ -175,6 +196,7 @@ fn paint_tiles(
         if let Some((x, y)) = state.hover {
             let kind = state.current_kind;
             let elevation = state.current_elev;
+            let tile_type = state.current_texture;
             let state_ref = &mut *state;
             let current = state_ref.map.get(x, y);
             let target_ramp_direction = if kind == TileKind::Ramp {
@@ -192,9 +214,12 @@ fn paint_tiles(
             } else {
                 None
             };
+
+            let tile_type = current.tile_type.clone();
             if current.kind != kind
                 || current.elevation != elevation
                 || current.ramp_direction != target_ramp_direction
+                || current.tile_type != tile_type
             {
                 let tile_type = current.tile_type.clone();
                 state_ref.map.set(
@@ -298,9 +323,17 @@ fn rebuild_terrain_mesh(
     }
     state.map_dirty = false;
 
-    let mesh = terrain::build_map_mesh(&state.map);
-    if let Some(existing) = meshes.get_mut(&visual.mesh) {
-        *existing = mesh;
+    let mesh_map = terrain::build_map_meshes(&state.map);
+
+    for (tile_type, layer) in &visual.layers {
+        let mesh = mesh_map
+            .get(tile_type)
+            .cloned()
+            .unwrap_or_else(terrain::empty_mesh);
+
+        if let Some(existing) = meshes.get_mut(&layer.mesh) {
+            *existing = mesh;
+        }
     }
 }
 

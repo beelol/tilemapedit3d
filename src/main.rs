@@ -4,6 +4,7 @@ mod editor;
 mod grid_visual;
 mod io;
 mod terrain;
+mod texture;
 mod types;
 mod ui;
 
@@ -12,12 +13,19 @@ use bevy_egui::EguiPlugin;
 use camera::CameraPlugin;
 use controls::ControlsPlugin;
 use editor::EditorPlugin;
+use texture::TexturePlugin;
 use ui::UiPlugin;
 
 fn main() {
     App::new()
         .add_plugins((DefaultPlugins, EguiPlugin))
-        .add_plugins((CameraPlugin, ControlsPlugin, EditorPlugin, UiPlugin))
+        .add_plugins((
+            TexturePlugin,
+            CameraPlugin,
+            ControlsPlugin,
+            EditorPlugin,
+            UiPlugin,
+        ))
         .add_systems(Startup, setup_light)
         .add_systems(Update, grid_visual::draw_grid)
         .run();

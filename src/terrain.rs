@@ -1,7 +1,10 @@
-use crate::types::{RampDirection, TILE_HEIGHT, TILE_SIZE, TileKind, TileMap};
+use std::collections::HashMap;
+
+use crate::types::{RampDirection, TILE_HEIGHT, TILE_SIZE, TileKind, TileMap, TileType};
 use bevy::prelude::*;
 use bevy::render::mesh::Indices;
 use bevy::render::render_asset::RenderAssetUsages;
+use bevy::render::render_resource::PrimitiveTopology;
 
 pub const CORNER_NW: usize = 0;
 pub const CORNER_NE: usize = 1;
@@ -47,15 +50,20 @@ pub fn tile_corner_heights(map: &TileMap, x: u32, y: u32) -> [f32; 4] {
     corners
 }
 
-pub fn build_map_mesh(map: &TileMap) -> Mesh {
+pub fn empty_mesh() -> Mesh {
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+}
+
+pub fn build_map_meshes(map: &TileMap) -> HashMap<TileType, Mesh> {
+    let mut result = HashMap::new();
+
     if map.width == 0 || map.height == 0 {
-        return Mesh::new(
-            bevy::render::render_resource::PrimitiveTopology::TriangleList,
-            RenderAssetUsages::default(),
-        );
+        return result;
     }
 
-    // Cache corner heights for every tile so we can stitch seams reliably.
     let mut corner_cache = vec![[0.0f32; 4]; (map.width * map.height) as usize];
     for y in 0..map.height {
         for x in 0..map.width {
@@ -64,49 +72,37 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
         }
     }
 
-    let mut positions = Vec::new();
-    let mut normals = Vec::new();
-    let mut uvs = Vec::new();
-    let mut indices = Vec::new();
-    let mut next_index: u32 = 0;
+    let mut buffers: HashMap<TileType, MeshBuffers> = HashMap::new();
 
     for y in 0..map.height {
         for x in 0..map.width {
             let idx = map.idx(x, y);
+            let tile = map.get(x, y);
             let corners = corner_cache[idx];
             let x0 = x as f32 * TILE_SIZE;
             let x1 = x0 + TILE_SIZE;
             let z0 = y as f32 * TILE_SIZE;
             let z1 = z0 + TILE_SIZE;
 
+            let buffer = buffers.entry(tile.tile_type).or_default();
+
             let nw = Vec3::new(x0, corners[CORNER_NW], z0);
             let ne = Vec3::new(x1, corners[CORNER_NE], z0);
             let sw = Vec3::new(x0, corners[CORNER_SW], z1);
             let se = Vec3::new(x1, corners[CORNER_SE], z1);
 
-            push_quad(
-                &mut positions,
-                &mut normals,
-                &mut uvs,
-                &mut indices,
-                &mut next_index,
+            buffer.push_quad(
                 [nw, sw, se, ne],
                 [[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]],
             );
 
-            // North edge (towards y-1)
             let (bnw, bne) = if y > 0 {
                 let neighbor = corner_cache[map.idx(x, y - 1)];
                 (neighbor[CORNER_SW], neighbor[CORNER_SE])
             } else {
                 (0.0, 0.0)
             };
-            add_side_face(
-                &mut positions,
-                &mut normals,
-                &mut uvs,
-                &mut indices,
-                &mut next_index,
+            buffer.add_side_face(
                 nw,
                 ne,
                 Vec3::new(x0, bnw.min(nw.y), z0),
@@ -114,19 +110,13 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
                 RampDirection::North,
             );
 
-            // South edge (towards y+1)
             let (bsw, bse) = if y + 1 < map.height {
                 let neighbor = corner_cache[map.idx(x, y + 1)];
                 (neighbor[CORNER_NW], neighbor[CORNER_NE])
             } else {
                 (0.0, 0.0)
             };
-            add_side_face(
-                &mut positions,
-                &mut normals,
-                &mut uvs,
-                &mut indices,
-                &mut next_index,
+            buffer.add_side_face(
                 se,
                 sw,
                 Vec3::new(x1, bse.min(se.y), z1),
@@ -134,19 +124,13 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
                 RampDirection::South,
             );
 
-            // West edge (towards x-1)
             let (bnw, bsw) = if x > 0 {
                 let neighbor = corner_cache[map.idx(x - 1, y)];
                 (neighbor[CORNER_NE], neighbor[CORNER_SE])
             } else {
                 (0.0, 0.0)
             };
-            add_side_face(
-                &mut positions,
-                &mut normals,
-                &mut uvs,
-                &mut indices,
-                &mut next_index,
+            buffer.add_side_face(
                 sw,
                 nw,
                 Vec3::new(x0, bsw.min(sw.y), z1),
@@ -154,19 +138,13 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
                 RampDirection::West,
             );
 
-            // East edge (towards x+1)
             let (bne, bse) = if x + 1 < map.width {
                 let neighbor = corner_cache[map.idx(x + 1, y)];
                 (neighbor[CORNER_NW], neighbor[CORNER_SW])
             } else {
                 (0.0, 0.0)
             };
-            add_side_face(
-                &mut positions,
-                &mut normals,
-                &mut uvs,
-                &mut indices,
-                &mut next_index,
+            buffer.add_side_face(
                 ne,
                 se,
                 Vec3::new(x1, bne.min(ne.y), z0),
@@ -176,15 +154,11 @@ pub fn build_map_mesh(map: &TileMap) -> Mesh {
         }
     }
 
-    let mut mesh = Mesh::new(
-        bevy::render::render_resource::PrimitiveTopology::TriangleList,
-        RenderAssetUsages::default(),
-    );
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-    mesh.insert_indices(Indices::U32(indices));
-    mesh
+    for (tile_type, buffer) in buffers {
+        result.insert(tile_type, buffer.into_mesh());
+    }
+
+    result
 }
 
 fn find_ramp_target(map: &TileMap, x: u32, y: u32, base: f32) -> Option<(RampDirection, f32)> {
@@ -222,6 +196,62 @@ fn ramp_neighbor_height(
     let neighbor = map.get(ux, uy);
     let height = neighbor.elevation as f32 * TILE_HEIGHT;
     if height < base { Some(height) } else { None }
+}
+
+#[derive(Default)]
+struct MeshBuffers {
+    positions: Vec<[f32; 3]>,
+    normals: Vec<[f32; 3]>,
+    uvs: Vec<[f32; 2]>,
+    indices: Vec<u32>,
+    next_index: u32,
+}
+
+impl MeshBuffers {
+    fn push_quad(&mut self, verts: [Vec3; 4], tex: [[f32; 2]; 4]) {
+        push_quad(
+            &mut self.positions,
+            &mut self.normals,
+            &mut self.uvs,
+            &mut self.indices,
+            &mut self.next_index,
+            verts,
+            tex,
+        );
+    }
+
+    fn add_side_face(
+        &mut self,
+        top_a: Vec3,
+        top_b: Vec3,
+        bottom_a: Vec3,
+        bottom_b: Vec3,
+        direction: RampDirection,
+    ) {
+        add_side_face(
+            &mut self.positions,
+            &mut self.normals,
+            &mut self.uvs,
+            &mut self.indices,
+            &mut self.next_index,
+            top_a,
+            top_b,
+            bottom_a,
+            bottom_b,
+            direction,
+        );
+    }
+
+    fn into_mesh(self) -> Mesh {
+        let mut mesh = empty_mesh();
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, self.positions);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, self.normals);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, self.uvs);
+        if !self.indices.is_empty() {
+            mesh.insert_indices(Indices::U32(self.indices));
+        }
+        mesh
+    }
 }
 
 fn push_quad(

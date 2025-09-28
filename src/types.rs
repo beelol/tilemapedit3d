@@ -42,6 +42,20 @@ impl RampDirection {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, Encode, Decode, PartialEq, Eq, Hash)]
+pub enum TileType {
+    Grass,
+    Dirt,
+    Cliff,
+    Water,
+}
+
+impl Default for TileType {
+    fn default() -> Self {
+        TileType::Grass
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Encode, Decode)]
 pub struct Tile {
     pub kind: TileKind,
@@ -51,14 +65,6 @@ pub struct Tile {
     pub elevation: i8, // can be negative for underwater, or positive for cliffs
     #[serde(default)]
     pub ramp_direction: Option<RampDirection>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Encode, Decode)]
-pub enum TileType {
-    Grass,
-    Dirt,
-    Cliff,
-    Water,
 }
 
 #[derive(Serialize, Deserialize, Debug, Encode, Decode)]
@@ -73,17 +79,16 @@ impl TileMap {
         Self {
             width: w,
             height: h,
-            tiles: vec![
-                Tile {
+            tiles: (0..w * h)
+                .map(|_| Tile {
                     kind: TileKind::Floor,
-                    tile_type: TileType::Grass,
+                    tile_type: TileType::default(),
                     elevation: 0,
                     x: 0,
                     y: 0,
                     ramp_direction: None,
-                };
-                (w * h) as usize
-            ],
+                })
+                .collect(),
         }
     }
     pub fn idx(&self, x: u32, y: u32) -> usize {
