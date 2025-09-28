@@ -47,7 +47,7 @@ pub enum TileType {
     Grass,
     Dirt,
     Cliff,
-    Water,
+    Rock,
 }
 
 impl Default for TileType {

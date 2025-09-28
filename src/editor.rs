@@ -101,6 +101,18 @@ fn spawn_editor_assets(
         None,
     );
 
+    textures.load_and_register(
+        TileType::Rock,
+        "Ground Rock",
+        &asset_server,
+        &mut mats,
+        "textures/terrain/rock/aerial_ground_rock_diff_1k.png",
+        Some("textures/terrain/rock/aerial_ground_rock_nor_gl_1k_fixed.exr"),
+        Some("textures/terrain/rock/aerial_ground_rock_rough_1k.png"),
+        // Some("textures/terrain/rocky_terrain_02_spec_1k.png"),
+        None,
+    );
+
     let mut visual = TerrainVisual::default();
 
     for entry in textures.iter() {
