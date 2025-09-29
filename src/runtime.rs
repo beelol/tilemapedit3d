@@ -3,6 +3,7 @@ use crate::terrain::{self, TerrainMeshSet};
 use crate::texture::material::{self, TerrainMaterial};
 use crate::texture::registry::TerrainTextureRegistry;
 use crate::types::TileType;
+use bevy::asset::LoadState;
 use bevy::pbr::MaterialMeshBundle;
 use bevy::prelude::*;
 
@@ -78,17 +79,58 @@ fn update_runtime_material(
     mut textures: ResMut<TerrainTextureRegistry>,
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<TerrainMaterial>>,
+    asset_server: Res<AssetServer>,
     runtime: Option<Res<RuntimeTerrainVisual>>,
+    mut visibility_query: Query<&mut Visibility>,
 ) {
     let Some(runtime) = runtime else {
         return;
     };
 
+    let Ok(mut visibility) = visibility_query.get_mut(runtime.entity) else {
+        return;
+    };
+
+    let mut waiting_for_textures = false;
+    let mut encountered_failure = false;
+
+    {
+        let registry = textures.as_ref();
+        for entry in registry.iter() {
+            match asset_server.get_load_state(entry.preview.id()) {
+                Some(LoadState::Loaded) => {}
+                Some(LoadState::Failed) => {
+                    error!(
+                        tile_type = ?entry.tile_type,
+                        "Terrain preview texture failed to load"
+                    );
+                    encountered_failure = true;
+                }
+                _ => {
+                    waiting_for_textures = true;
+                }
+            }
+        }
+    }
+
+    if encountered_failure {
+        *visibility = Visibility::Hidden;
+        return;
+    }
+
+    if waiting_for_textures {
+        *visibility = Visibility::Hidden;
+        return;
+    }
+
     let Some(material) = materials.get_mut(&runtime.material) else {
+        *visibility = Visibility::Hidden;
         return;
     };
 
     let Some(array_handle) = textures.ensure_texture_array(&mut images) else {
+        error!("Failed to assemble terrain texture array after previews loaded");
+        *visibility = Visibility::Hidden;
         return;
     };
 
@@ -98,6 +140,7 @@ fn update_runtime_material(
         .unwrap_or(0);
 
     if desired_layers == 0 {
+        *visibility = Visibility::Hidden;
         return;
     }
 
@@ -114,4 +157,6 @@ fn update_runtime_material(
     {
         material.extension.texture_array = Some(array_handle.clone());
     }
+
+    *visibility = Visibility::Visible;
 }
