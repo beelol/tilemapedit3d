@@ -9,6 +9,7 @@ pub struct TexturePlugin;
 impl Plugin for TexturePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<material::TerrainMaterial>::default())
-            .init_resource::<registry::TerrainTextureRegistry>();
+            .init_resource::<registry::TerrainTextureRegistry>()
+            .init_resource::<material::TerrainTextureArray>();
     }
 }
