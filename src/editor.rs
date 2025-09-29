@@ -351,7 +351,7 @@ fn ramp_targets(map: &TileMap, x: u32, y: u32, base: f32) -> Vec<RampDirection> 
 }
 
 fn rebuild_terrain_mesh(
-    mut state: ResMut<EditorState>,
+    state: Res<EditorState>,
     mut meshes: ResMut<Assets<Mesh>>,
     visual: Res<TerrainVisual>,
 ) {

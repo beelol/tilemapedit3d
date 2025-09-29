@@ -94,7 +94,7 @@ fn update_runtime_material(
 
     let desired_layers = images
         .get(&array_handle)
-        .map(|image| image.texture_descriptor.depth_or_array_layers)
+        .map(|image| image.texture_descriptor.size.depth_or_array_layers)
         .unwrap_or(0);
 
     if desired_layers == 0 {
