@@ -1,4 +1,5 @@
 #import bevy_pbr::{
+    pbr_bindings,
     pbr_functions::alpha_discard,
     pbr_fragment::pbr_input_from_standard_material,
 };
@@ -46,27 +47,29 @@ fn fragment(
     pbr_functions::visibility_range_dither(in.position, in.visibility_range_dither);
 #endif
 
-    var modified_in: VertexOutput = in;
+    let offset = in.world_position.xz - floor(in.world_position.xz);
+    let world_uv = fract(in.world_position.xz * terrain_material_extension.uv_scale);
 
-#ifdef VERTEX_UVS_A
-    let world_uv = modified_in.world_position.xz * terrain_material_extension.uv_scale;
-    modified_in.uv = world_uv;
-    #ifdef VERTEX_UVS_B
-        modified_in.uv_b = world_uv;
-    #endif
-#else
-    #ifdef VERTEX_UVS_B
-        let world_uv = modified_in.world_position.xz * terrain_material_extension.uv_scale;
-        modified_in.uv_b = world_uv;
-    #endif
-#endif
 
-    var pbr_input = pbr_input_from_standard_material(modified_in, is_front);
+   // Build PBR input (does default texture lookups using mesh UVs)
+   var pbr_input = pbr_input_from_standard_material(in, is_front);
 
-    pbr_input.material.base_color = alpha_discard(pbr_input.material, pbr_input.material.base_color);
+   // Override the base_color using world_uv
+   let world_base = textureSample(
+       pbr_bindings::base_color_texture,
+       pbr_bindings::base_color_sampler,
+       world_uv,
+   );
+   pbr_input.material.base_color = world_base;
+
+
+   pbr_input.material.base_color = alpha_discard(
+        pbr_input.material,
+        pbr_input.material.base_color,
+    );
 
 #ifdef PREPASS_PIPELINE
-    let out = deferred_output(modified_in, pbr_input);
+    let out = deferred_output(in, pbr_input);
 #else
     var out: FragmentOutput;
     if (pbr_input.material.flags & STANDARD_MATERIAL_FLAGS_UNLIT_BIT) == 0u {
@@ -80,3 +83,4 @@ fn fragment(
 
     return out;
 }
+
