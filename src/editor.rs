@@ -245,7 +245,7 @@ fn paint_tiles(
             let current = state_ref.map.get(x, y);
             let target_ramp_direction = if kind == TileKind::Ramp {
                 let base = elevation as f32 * TILE_HEIGHT;
-                let mut candidates = ramp_targets(&state_ref.map, x, y, base);
+                let candidates = ramp_targets(&state_ref.map, x, y, base);
                 if let Some(existing) = current.ramp_direction {
                     if candidates.contains(&existing) {
                         Some(existing)
@@ -284,7 +284,7 @@ fn paint_tiles(
 
 fn rotate_ramps(
     buttons: Res<ButtonInput<MouseButton>>,
-    mut state: ResMut<EditorState>,
+    state: ResMut<EditorState>,
     mut egui: EguiContexts,
 ) {
     if egui.ctx_mut().wants_pointer_input() {

@@ -3,10 +3,12 @@ use bevy::math::Vec2;
 use bevy::pbr::{ExtendedMaterial, MaterialExtension, StandardMaterial};
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
-use bevy::render::render_resource::{AsBindGroup, RenderAssetUsages, ShaderRef, ShaderType};
-use bevy::render::texture::{
-    Extent3d, Image, TextureDimension, TextureFormat, TextureViewDescriptor, TextureViewDimension,
+use bevy::render::render_asset::RenderAssetUsages;
+use bevy::render::render_resource::{
+    AsBindGroup, Extent3d, ShaderRef, ShaderType, TextureDimension, TextureFormat, TextureUsages,
+    TextureViewDescriptor, TextureViewDimension,
 };
+use bevy::render::texture::Image;
 
 use crate::types::TILE_SIZE;
 
@@ -164,8 +166,7 @@ pub fn create_texture_array_image(layers: &[&Image]) -> Option<Image> {
         RenderAssetUsages::default(),
     );
     array_image.texture_descriptor.mip_level_count = 1;
-    array_image.texture_descriptor.usage =
-        wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST;
+    array_image.texture_descriptor.usage = TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST;
     array_image.texture_view_descriptor = Some(TextureViewDescriptor {
         dimension: Some(TextureViewDimension::D2Array),
         ..Default::default()
