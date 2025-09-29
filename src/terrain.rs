@@ -385,27 +385,16 @@ enum SurfaceUvMapping {
 
 impl SurfaceUvMapping {
     fn compute_uvs(self, verts: [Vec3; 4], scale: TerrainUvScale) -> [[f32; 2]; 4] {
-        let wrap_unit = |value: f32| value.rem_euclid(1.0);
-
         match self {
-            SurfaceUvMapping::XZ => verts.map(|v| {
-                [
-                    wrap_unit(v.x * scale.inv_horizontal),
-                    wrap_unit(v.z * scale.inv_horizontal),
-                ]
-            }),
-            SurfaceUvMapping::XY => verts.map(|v| {
-                [
-                    wrap_unit(v.x * scale.inv_horizontal),
-                    v.y * scale.inv_vertical,
-                ]
-            }),
-            SurfaceUvMapping::ZY => verts.map(|v| {
-                [
-                    wrap_unit(v.z * scale.inv_horizontal),
-                    v.y * scale.inv_vertical,
-                ]
-            }),
+            SurfaceUvMapping::XZ => {
+                verts.map(|v| [v.x * scale.inv_horizontal, v.z * scale.inv_horizontal])
+            }
+            SurfaceUvMapping::XY => {
+                verts.map(|v| [v.x * scale.inv_horizontal, v.y * scale.inv_vertical])
+            }
+            SurfaceUvMapping::ZY => {
+                verts.map(|v| [v.z * scale.inv_horizontal, v.y * scale.inv_vertical])
+            }
         }
     }
 }
@@ -511,19 +500,36 @@ mod tests {
         let third = tile_uvs(2);
         let fourth = tile_uvs(3);
 
-        for idx in 0..4 {
-            assert!(
-                first[idx].distance(third[idx]) < 1e-6,
-                "tile 0 uv[{idx}] {:?} != tile 2 uv[{idx}] {:?}",
-                first[idx],
-                third[idx]
-            );
-            assert!(
-                second[idx].distance(fourth[idx]) < 1e-6,
-                "tile 1 uv[{idx}] {:?} != tile 3 uv[{idx}] {:?}",
-                second[idx],
-                fourth[idx]
-            );
-        }
+        let assert_repeats = |a: &[Vec2; 4], b: &[Vec2; 4], label_a: &str, label_b: &str| {
+            for idx in 0..4 {
+                let diff = b[idx] - a[idx];
+                let nearest_x = diff.x.round();
+                let nearest_y = diff.y.round();
+
+                assert!(
+                    (diff.x - nearest_x).abs() < 1e-6,
+                    "tile {label_a} uv[{idx}].x {ax:?} and tile {label_b} uv[{idx}].x {bx:?} differ by a non-integer offset {diff:?}",
+                    label_a = label_a,
+                    idx = idx,
+                    ax = a[idx].x,
+                    label_b = label_b,
+                    bx = b[idx].x,
+                    diff = diff.x,
+                );
+                assert!(
+                    (diff.y - nearest_y).abs() < 1e-6,
+                    "tile {label_a} uv[{idx}].y {ay:?} and tile {label_b} uv[{idx}].y {by:?} differ by a non-integer offset {diff:?}",
+                    label_a = label_a,
+                    idx = idx,
+                    ay = a[idx].y,
+                    label_b = label_b,
+                    by = b[idx].y,
+                    diff = diff.y,
+                );
+            }
+        };
+
+        assert_repeats(&first, &third, "0", "2");
+        assert_repeats(&second, &fourth, "1", "3");
     }
 }
