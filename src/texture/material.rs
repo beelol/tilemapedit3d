@@ -72,6 +72,7 @@ pub fn load_terrain_material(
 
     base_material.perceptual_roughness = 1.0;
     base_material.metallic = 0.0;
+    base_material.alpha_mode = AlphaMode::Opaque;
 
     let material_handle = materials.add(TerrainMaterial {
         base: base_material,
