@@ -284,7 +284,7 @@ fn paint_tiles(
 
 fn rotate_ramps(
     buttons: Res<ButtonInput<MouseButton>>,
-    state: ResMut<EditorState>,
+    mut state: ResMut<EditorState>,
     mut egui: EguiContexts,
 ) {
     if egui.ctx_mut().wants_pointer_input() {
