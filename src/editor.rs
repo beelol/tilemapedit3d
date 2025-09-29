@@ -8,6 +8,7 @@ pub struct EditorPlugin;
 impl Plugin for EditorPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EditorState>()
+            .init_resource::<terrain::TerrainUvSettings>()
             .init_gizmo_group::<HoverGizmoGroup>()
             .add_systems(Startup, spawn_editor_assets)
             .add_systems(Startup, configure_hover_gizmos)
@@ -327,13 +328,14 @@ fn rebuild_terrain_mesh(
     mut state: ResMut<EditorState>,
     mut meshes: ResMut<Assets<Mesh>>,
     visual: Res<TerrainVisual>,
+    settings: Res<terrain::TerrainUvSettings>,
 ) {
     if !state.map_dirty {
         return;
     }
     state.map_dirty = false;
 
-    let mesh_map = terrain::build_map_meshes(&state.map);
+    let mesh_map = terrain::build_map_meshes(&state.map, &settings);
 
     for (tile_type, layer) in &visual.layers {
         let mesh = mesh_map

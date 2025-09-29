@@ -57,7 +57,20 @@ pub fn empty_mesh() -> Mesh {
     )
 }
 
-pub fn build_map_meshes(map: &TileMap) -> HashMap<TileType, Mesh> {
+#[derive(Resource, Clone, Copy)]
+pub struct TerrainUvSettings {
+    pub tiles_per_texture: f32,
+}
+
+impl Default for TerrainUvSettings {
+    fn default() -> Self {
+        Self {
+            tiles_per_texture: 4.0,
+        }
+    }
+}
+
+pub fn build_map_meshes(map: &TileMap, settings: &TerrainUvSettings) -> HashMap<TileType, Mesh> {
     let mut result = HashMap::new();
 
     if map.width == 0 || map.height == 0 {
@@ -84,17 +97,16 @@ pub fn build_map_meshes(map: &TileMap) -> HashMap<TileType, Mesh> {
             let z0 = y as f32 * TILE_SIZE;
             let z1 = z0 + TILE_SIZE;
 
-            let buffer = buffers.entry(tile.tile_type).or_default();
+            let buffer = buffers
+                .entry(tile.tile_type)
+                .or_insert_with(|| MeshBuffers::new(settings.tiles_per_texture));
 
             let nw = Vec3::new(x0, corners[CORNER_NW], z0);
             let ne = Vec3::new(x1, corners[CORNER_NE], z0);
             let sw = Vec3::new(x0, corners[CORNER_SW], z1);
             let se = Vec3::new(x1, corners[CORNER_SE], z1);
 
-            buffer.push_quad(
-                [nw, sw, se, ne],
-                [[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]],
-            );
+            buffer.push_quad([nw, sw, se, ne], SurfaceUvMapping::XZ);
 
             let (bnw, bne) = if y > 0 {
                 let neighbor = corner_cache[map.idx(x, y - 1)];
@@ -198,17 +210,29 @@ fn ramp_neighbor_height(
     if height < base { Some(height) } else { None }
 }
 
-#[derive(Default)]
 struct MeshBuffers {
     positions: Vec<[f32; 3]>,
     normals: Vec<[f32; 3]>,
     uvs: Vec<[f32; 2]>,
     indices: Vec<u32>,
     next_index: u32,
+    tiles_per_texture: f32,
 }
 
 impl MeshBuffers {
-    fn push_quad(&mut self, verts: [Vec3; 4], tex: [[f32; 2]; 4]) {
+    fn new(tiles_per_texture: f32) -> Self {
+        Self {
+            positions: Vec::new(),
+            normals: Vec::new(),
+            uvs: Vec::new(),
+            indices: Vec::new(),
+            next_index: 0,
+            tiles_per_texture,
+        }
+    }
+
+    fn push_quad(&mut self, verts: [Vec3; 4], mapping: SurfaceUvMapping) {
+        let tex = mapping.compute_uvs(verts, self.tiles_per_texture);
         push_quad(
             &mut self.positions,
             &mut self.normals,
@@ -239,6 +263,7 @@ impl MeshBuffers {
             bottom_a,
             bottom_b,
             direction,
+            self.tiles_per_texture,
         );
     }
 
@@ -311,30 +336,52 @@ fn add_side_face(
     bottom_a: Vec3,
     bottom_b: Vec3,
     direction: RampDirection,
+    tiles_per_texture: f32,
 ) {
     const EPS: f32 = 1e-4;
     if (top_a.y - bottom_a.y).abs() < EPS && (top_b.y - bottom_b.y).abs() < EPS {
         return;
     }
 
-    let (verts, tex) = match direction {
-        RampDirection::North => (
-            [top_a, top_b, bottom_b, bottom_a],
-            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
-        ),
-        RampDirection::South => (
-            [top_a, top_b, bottom_b, bottom_a],
-            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
-        ),
-        RampDirection::West => (
-            [top_a, top_b, bottom_b, bottom_a],
-            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
-        ),
-        RampDirection::East => (
-            [top_a, top_b, bottom_b, bottom_a],
-            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
-        ),
+    let verts = [top_a, top_b, bottom_b, bottom_a];
+    let mapping = match direction {
+        RampDirection::North | RampDirection::South => SurfaceUvMapping::XY,
+        RampDirection::West | RampDirection::East => SurfaceUvMapping::ZY,
     };
+    let tex = mapping.compute_uvs(verts, tiles_per_texture);
 
     push_quad(positions, normals, uvs, indices, next_index, verts, tex);
+}
+
+#[derive(Clone, Copy)]
+enum SurfaceUvMapping {
+    XZ,
+    XY,
+    ZY,
+}
+
+impl SurfaceUvMapping {
+    fn compute_uvs(self, verts: [Vec3; 4], tiles_per_texture: f32) -> [[f32; 2]; 4] {
+        let scale = if tiles_per_texture <= f32::EPSILON {
+            1.0
+        } else {
+            tiles_per_texture
+        };
+
+        let map_vertex = |v: Vec3| -> [f32; 2] {
+            let raw = match self {
+                SurfaceUvMapping::XZ => Vec2::new(v.x, v.z),
+                SurfaceUvMapping::XY => Vec2::new(v.x, v.y),
+                SurfaceUvMapping::ZY => Vec2::new(v.z, v.y),
+            };
+            (raw / scale).to_array()
+        };
+
+        [
+            map_vertex(verts[0]),
+            map_vertex(verts[1]),
+            map_vertex(verts[2]),
+            map_vertex(verts[3]),
+        ]
+    }
 }
