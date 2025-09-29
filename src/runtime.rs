@@ -92,7 +92,15 @@ fn update_runtime_material(
         return;
     };
 
-    let desired_layers = TileType::ALL.len() as u32;
+    let desired_layers = images
+        .get(&array_handle)
+        .map(|image| image.texture_descriptor.depth_or_array_layers)
+        .unwrap_or(0);
+
+    if desired_layers == 0 {
+        return;
+    }
+
     if material.extension.params.layer_count != desired_layers {
         material.extension.params.layer_count = desired_layers;
     }
@@ -104,6 +112,6 @@ fn update_runtime_material(
         .map(|handle| handle != &array_handle)
         .unwrap_or(true)
     {
-        material.extension.texture_array = Some(array_handle);
+        material.extension.texture_array = Some(array_handle.clone());
     }
 }

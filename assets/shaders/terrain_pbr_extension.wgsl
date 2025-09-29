@@ -31,7 +31,7 @@ struct TerrainMaterialExtension {
 @group(2) @binding(100)
 var<uniform> terrain_material_extension: TerrainMaterialExtension;
 
-#ifdef HAS_TERRAIN_MATERIAL_EXTENSION_TEXTURE_ARRAY
+#ifdef TERRAIN_MATERIAL_EXTENSION_TEXTURE_ARRAY
 @group(2) @binding(101)
 var terrain_texture_array: texture_2d_array<f32>;
 @group(2) @binding(102)
@@ -60,7 +60,7 @@ fn triplanar_sample(
     return x_tex * weights.x + y_tex * weights.y + z_tex * weights.z;
 }
 
-#ifdef HAS_TERRAIN_MATERIAL_EXTENSION_TEXTURE_ARRAY
+#ifdef TERRAIN_MATERIAL_EXTENSION_TEXTURE_ARRAY
 fn triplanar_sample_layer(
     tex: texture_2d_array<f32>,
     samp: sampler,
@@ -111,19 +111,23 @@ fn fragment(
 
     // Choose projection by dominant world normal axis
     let scale = terrain_material_extension.uv_scale;
-    var base_color = triplanar_sample(
+    var base_color = vec4<f32>(pbr_input.material.base_color.rgb, 1.0);
+
+#ifdef STANDARD_MATERIAL_BASE_COLOR_TEXTURE
+    base_color = triplanar_sample(
         pbr_bindings::base_color_texture,
         pbr_bindings::base_color_sampler,
         pbr_input.world_position.xyz,
         pbr_input.world_normal.xyz,
         scale,
     );
+#endif
 
-#ifdef HAS_TERRAIN_MATERIAL_EXTENSION_TEXTURE_ARRAY
+#ifdef TERRAIN_MATERIAL_EXTENSION_TEXTURE_ARRAY
     if (terrain_material_extension.layer_count > 0u) {
         let max_layer = i32(terrain_material_extension.layer_count) - 1;
         let layer_value = clamp(i32(round(in.uv2.x)), 0, max_layer);
-        base_color = triplanar_sample_layer(
+        var sampled = triplanar_sample_layer(
             terrain_texture_array,
             terrain_texture_sampler,
             pbr_input.world_position.xyz,
@@ -131,6 +135,8 @@ fn fragment(
             scale,
             layer_value,
         );
+        sampled.a = 1.0;
+        base_color = sampled;
     }
 #endif
 
