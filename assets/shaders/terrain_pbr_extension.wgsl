@@ -92,14 +92,15 @@ fn fragment(
     }
 
     // Sample base color using world-space planar UVs
-    let world_base = triplanar_sample(
+    var world_base = triplanar_sample(
         pbr_bindings::base_color_texture,
         pbr_bindings::base_color_sampler,
         pbr_input.world_position.xyz,
         pbr_input.world_normal.xyz,
         terrain_material_extension.uv_scale,
     );
-    pbr_input.material.base_color = alpha_discard(pbr_input.material, world_base);
+    world_base.a = 1.0;
+    pbr_input.material.base_color = world_base;
 
 //    // Alpha discard + lighting as before
 //    pbr_input.material.base_color = alpha_discard(pbr_input.material, pbr_input.material.base_color);
