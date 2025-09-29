@@ -126,7 +126,12 @@ fn fragment(
 #ifdef TERRAIN_MATERIAL_EXTENSION_TEXTURE_ARRAY
     if (terrain_material_extension.layer_count > 0u) {
         let max_layer = i32(terrain_material_extension.layer_count) - 1;
-        let layer_value = clamp(i32(round(in.uv2.x)), 0, max_layer);
+#ifdef VERTEX_UVS_B
+        let layer_source = in.uv_b.x;
+#else
+        let layer_source = 0.0;
+#endif
+        let layer_value = clamp(i32(round(layer_source)), 0, max_layer);
         var sampled = triplanar_sample_layer(
             terrain_texture_array,
             terrain_texture_sampler,
