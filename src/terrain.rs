@@ -91,10 +91,7 @@ pub fn build_map_meshes(map: &TileMap) -> HashMap<TileType, Mesh> {
             let sw = Vec3::new(x0, corners[CORNER_SW], z1);
             let se = Vec3::new(x1, corners[CORNER_SE], z1);
 
-            buffer.push_quad(
-                [nw, sw, se, ne],
-                [[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]],
-            );
+            buffer.push_quad([nw, sw, se, ne], [[0.0, 0.0]; 4]);
 
             let (bnw, bne) = if y > 0 {
                 let neighbor = corner_cache[map.idx(x, y - 1)];
@@ -318,22 +315,10 @@ fn add_side_face(
     }
 
     let (verts, tex) = match direction {
-        RampDirection::North => (
-            [top_a, top_b, bottom_b, bottom_a],
-            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
-        ),
-        RampDirection::South => (
-            [top_a, top_b, bottom_b, bottom_a],
-            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
-        ),
-        RampDirection::West => (
-            [top_a, top_b, bottom_b, bottom_a],
-            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
-        ),
-        RampDirection::East => (
-            [top_a, top_b, bottom_b, bottom_a],
-            [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
-        ),
+        RampDirection::North => ([top_a, top_b, bottom_b, bottom_a], [[0.0, 0.0]; 4]),
+        RampDirection::South => ([top_a, top_b, bottom_b, bottom_a], [[0.0, 0.0]; 4]),
+        RampDirection::West => ([top_a, top_b, bottom_b, bottom_a], [[0.0, 0.0]; 4]),
+        RampDirection::East => ([top_a, top_b, bottom_b, bottom_a], [[0.0, 0.0]; 4]),
     };
 
     push_quad(positions, normals, uvs, indices, next_index, verts, tex);
