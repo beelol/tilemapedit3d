@@ -147,6 +147,7 @@ fn spawn_editor_assets(
     let mut visual = TerrainVisual::default();
 
     for entry in textures.iter() {
+        let tile_type = entry.tile_type;
         let mesh = meshes.add(terrain::empty_mesh());
         commands.spawn((
             MaterialMeshBundle {

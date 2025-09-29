@@ -25,6 +25,7 @@ pub struct RuntimeTerrainVisual {
     pub mesh: Handle<Mesh>,
     pub material: Handle<TerrainMaterial>,
     pub entity: Entity,
+    pub needs_rebuild: bool,
 }
 
 fn setup_runtime_mesh(
@@ -51,27 +52,32 @@ fn setup_runtime_mesh(
         mesh,
         material,
         entity,
+        needs_rebuild: true,
     });
 }
 
 fn rebuild_runtime_mesh(
     state: Res<EditorState>,
-    runtime: Option<Res<RuntimeTerrainVisual>>,
+    mut runtime: Option<ResMut<RuntimeTerrainVisual>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    if !state.map_dirty {
-        return;
-    }
-
-    let Some(runtime) = runtime else {
+    let Some(mut runtime) = runtime else {
         return;
     };
+
+    runtime.needs_rebuild |= state.map_dirty;
+
+    if !runtime.needs_rebuild {
+        return;
+    }
 
     let combined = terrain::build_combined_mesh(&state.map);
 
     if let Some(existing) = meshes.get_mut(&runtime.mesh) {
         *existing = combined;
     }
+
+    runtime.needs_rebuild = false;
 }
 
 fn update_runtime_material(
