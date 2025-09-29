@@ -385,20 +385,28 @@ enum SurfaceUvMapping {
 
 impl SurfaceUvMapping {
     fn compute_uvs(self, verts: [Vec3; 4], scale: TerrainUvScale) -> [[f32; 2]; 4] {
-        let map_vertex = |v: Vec3| -> [f32; 2] {
-            match self {
-                SurfaceUvMapping::XZ => [v.x * scale.inv_horizontal, v.z * scale.inv_horizontal],
-                SurfaceUvMapping::XY => [v.x * scale.inv_horizontal, v.y * scale.inv_vertical],
-                SurfaceUvMapping::ZY => [v.z * scale.inv_horizontal, v.y * scale.inv_vertical],
-            }
-        };
+        let wrap_unit = |value: f32| value.rem_euclid(1.0);
 
-        [
-            map_vertex(verts[0]),
-            map_vertex(verts[1]),
-            map_vertex(verts[2]),
-            map_vertex(verts[3]),
-        ]
+        match self {
+            SurfaceUvMapping::XZ => verts.map(|v| {
+                [
+                    wrap_unit(v.x * scale.inv_horizontal),
+                    wrap_unit(v.z * scale.inv_horizontal),
+                ]
+            }),
+            SurfaceUvMapping::XY => verts.map(|v| {
+                [
+                    wrap_unit(v.x * scale.inv_horizontal),
+                    v.y * scale.inv_vertical,
+                ]
+            }),
+            SurfaceUvMapping::ZY => verts.map(|v| {
+                [
+                    wrap_unit(v.z * scale.inv_horizontal),
+                    v.y * scale.inv_vertical,
+                ]
+            }),
+        }
     }
 }
 
@@ -456,6 +464,65 @@ mod tests {
             assert!(
                 actual.distance(*expected) < 1e-6,
                 "uv[{idx}] {actual:?} != {expected:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn top_face_uvs_wrap_every_four_tiles() {
+        let mut map = TileMap::new(4, 1);
+        for x in 0..map.width {
+            let mut tile = map.get(x, 0).to_owned();
+            tile.x = x;
+            tile.y = 0;
+            map.set(x, 0, tile);
+        }
+
+        let settings = TerrainUvSettings {
+            tiles_per_texture: 4.0,
+        };
+
+        let mesh = build_map_meshes(&map, &settings)
+            .remove(&TileType::Grass)
+            .expect("grass mesh");
+
+        let VertexAttributeValues::Float32x2(uvs) = mesh
+            .attribute(Mesh::ATTRIBUTE_UV_0)
+            .expect("uvs present")
+            .clone()
+        else {
+            panic!("unexpected uv format");
+        };
+
+        assert!(uvs.len() >= 24, "expected four quads worth of vertices");
+
+        let tile_uvs = |tile_index: usize| -> [Vec2; 4] {
+            let start = tile_index * 6;
+            [
+                Vec2::from_array(uvs[start]),
+                Vec2::from_array(uvs[start + 1]),
+                Vec2::from_array(uvs[start + 2]),
+                Vec2::from_array(uvs[start + 5]),
+            ]
+        };
+
+        let first = tile_uvs(0);
+        let second = tile_uvs(1);
+        let third = tile_uvs(2);
+        let fourth = tile_uvs(3);
+
+        for idx in 0..4 {
+            assert!(
+                first[idx].distance(third[idx]) < 1e-6,
+                "tile 0 uv[{idx}] {:?} != tile 2 uv[{idx}] {:?}",
+                first[idx],
+                third[idx]
+            );
+            assert!(
+                second[idx].distance(fourth[idx]) < 1e-6,
+                "tile 1 uv[{idx}] {:?} != tile 3 uv[{idx}] {:?}",
+                second[idx],
+                fourth[idx]
             );
         }
     }
