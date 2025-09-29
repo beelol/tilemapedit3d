@@ -4,14 +4,14 @@ use bevy::prelude::*;
 
 use crate::types::TileType;
 
-use super::material::{self, TerrainMaterialHandles};
+use super::material::{self, TerrainMaterial, TerrainMaterialHandles};
 
 #[derive(Debug, Clone)]
 pub struct TerrainTextureEntry {
     pub tile_type: TileType,
     pub name: String,
     pub icon: Handle<Image>,
-    pub material: Handle<StandardMaterial>,
+    pub material: Handle<TerrainMaterial>,
 }
 
 #[derive(Resource, Default)]
@@ -36,12 +36,13 @@ impl TerrainTextureRegistry {
         tile_type: TileType,
         name: impl Into<String>,
         asset_server: &AssetServer,
-        materials: &mut Assets<StandardMaterial>,
+        materials: &mut Assets<TerrainMaterial>,
         base_color: &str,
         normal: Option<&str>,
         roughness: Option<&str>,
         specular: Option<&str>,
-    ) -> Handle<StandardMaterial> {
+        uv_scale: f32,
+    ) -> Handle<TerrainMaterial> {
         let TerrainMaterialHandles {
             material,
             base_color: icon,
@@ -53,6 +54,7 @@ impl TerrainTextureRegistry {
             normal.map(|s| s.to_string()),
             roughness.map(|s| s.to_string()),
             specular.map(|s| s.to_string()),
+            uv_scale,
         );
 
         self.register_loaded(TerrainTextureEntry {

@@ -1,4 +1,5 @@
 use crate::terrain;
+use crate::texture::material::TerrainMaterial;
 use crate::texture::registry::TerrainTextureRegistry;
 use crate::types::*;
 use bevy::prelude::*;
@@ -84,10 +85,11 @@ fn configure_hover_gizmos(mut configs: ResMut<GizmoConfigStore>) {
 
 fn spawn_editor_assets(
     mut commands: Commands,
-    mut mats: ResMut<Assets<StandardMaterial>>,
+    mut mats: ResMut<Assets<TerrainMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     asset_server: Res<AssetServer>,
     mut textures: ResMut<TerrainTextureRegistry>,
+    settings: Res<terrain::TerrainUvSettings>,
 ) {
     textures.load_and_register(
         TileType::Grass,
@@ -100,6 +102,7 @@ fn spawn_editor_assets(
         None,
         // Some("textures/terrain/rocky_terrain_02_spec_1k.png"),
         None,
+        settings.uv_scale(),
     );
 
     textures.load_and_register(
@@ -112,6 +115,7 @@ fn spawn_editor_assets(
         Some("textures/terrain/rock/aerial_ground_rock_rough_1k.png"),
         // Some("textures/terrain/rocky_terrain_02_spec_1k.png"),
         None,
+        settings.uv_scale(),
     );
 
     let mut visual = TerrainVisual::default();
@@ -119,7 +123,7 @@ fn spawn_editor_assets(
     for entry in textures.iter() {
         let mesh = meshes.add(terrain::empty_mesh());
         let entity = commands
-            .spawn(PbrBundle {
+            .spawn(MaterialMeshBundle {
                 mesh: mesh.clone(),
                 material: entry.material.clone(),
                 transform: Transform::default(),
@@ -328,14 +332,13 @@ fn rebuild_terrain_mesh(
     mut state: ResMut<EditorState>,
     mut meshes: ResMut<Assets<Mesh>>,
     visual: Res<TerrainVisual>,
-    settings: Res<terrain::TerrainUvSettings>,
 ) {
     if !state.map_dirty {
         return;
     }
     state.map_dirty = false;
 
-    let mesh_map = terrain::build_map_meshes(&state.map, &settings);
+    let mesh_map = terrain::build_map_meshes(&state.map);
 
     for (tile_type, layer) in &visual.layers {
         let mesh = mesh_map

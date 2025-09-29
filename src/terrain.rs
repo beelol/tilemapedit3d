@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::types::{RampDirection, TILE_HEIGHT, TILE_SIZE, TileKind, TileMap, TileType};
 use bevy::prelude::*;
-use bevy::render::mesh::{Indices, VertexAttributeValues};
+use bevy::render::mesh::Indices;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::PrimitiveTopology;
 
@@ -59,9 +59,8 @@ pub fn empty_mesh() -> Mesh {
 
 #[derive(Resource, Clone, Copy)]
 pub struct TerrainUvSettings {
-    /// Number of tiles that should span a single full texture repeat. The value represents the
-    /// total tile count of the square patch (e.g. `4.0` means a 2×2 group of tiles will show one
-    /// full texture).
+    /// Number of tiles along one axis that should span a single full texture repeat. For example,
+    /// a value of `4.0` means a 4×4 tile area (in world units) maps to one texture repetition.
     pub tiles_per_texture: f32,
 }
 
@@ -73,26 +72,14 @@ impl Default for TerrainUvSettings {
     }
 }
 
-#[derive(Clone, Copy)]
-struct TerrainUvScale {
-    inv_horizontal: f32,
-    inv_vertical: f32,
-}
-
-impl TerrainUvScale {
-    fn from_settings(settings: &TerrainUvSettings) -> Self {
-        let tile_group = settings.tiles_per_texture.max(1.0).sqrt();
-        let horizontal_span = (tile_group * TILE_SIZE).max(f32::EPSILON);
-        let vertical_span = (tile_group * TILE_HEIGHT).max(f32::EPSILON);
-
-        Self {
-            inv_horizontal: 1.0 / horizontal_span,
-            inv_vertical: 1.0 / vertical_span,
-        }
+impl TerrainUvSettings {
+    pub fn uv_scale(&self) -> f32 {
+        let tiles = self.tiles_per_texture.max(1.0);
+        1.0 / tiles
     }
 }
 
-pub fn build_map_meshes(map: &TileMap, settings: &TerrainUvSettings) -> HashMap<TileType, Mesh> {
+pub fn build_map_meshes(map: &TileMap) -> HashMap<TileType, Mesh> {
     let mut result = HashMap::new();
 
     if map.width == 0 || map.height == 0 {
@@ -107,7 +94,6 @@ pub fn build_map_meshes(map: &TileMap, settings: &TerrainUvSettings) -> HashMap<
         }
     }
 
-    let uv_scale = TerrainUvScale::from_settings(settings);
     let mut buffers: HashMap<TileType, MeshBuffers> = HashMap::new();
 
     for y in 0..map.height {
@@ -122,14 +108,14 @@ pub fn build_map_meshes(map: &TileMap, settings: &TerrainUvSettings) -> HashMap<
 
             let buffer = buffers
                 .entry(tile.tile_type)
-                .or_insert_with(|| MeshBuffers::new(uv_scale));
+                .or_insert_with(MeshBuffers::new);
 
             let nw = Vec3::new(x0, corners[CORNER_NW], z0);
             let ne = Vec3::new(x1, corners[CORNER_NE], z0);
             let sw = Vec3::new(x0, corners[CORNER_SW], z1);
             let se = Vec3::new(x1, corners[CORNER_SE], z1);
 
-            buffer.push_quad([nw, sw, se, ne], SurfaceUvMapping::XZ);
+            buffer.push_quad([nw, sw, se, ne]);
 
             let (bnw, bne) = if y > 0 {
                 let neighbor = corner_cache[map.idx(x, y - 1)];
@@ -236,34 +222,27 @@ fn ramp_neighbor_height(
 struct MeshBuffers {
     positions: Vec<[f32; 3]>,
     normals: Vec<[f32; 3]>,
-    uvs: Vec<[f32; 2]>,
     indices: Vec<u32>,
     next_index: u32,
-    uv_scale: TerrainUvScale,
 }
 
 impl MeshBuffers {
-    fn new(uv_scale: TerrainUvScale) -> Self {
+    fn new() -> Self {
         Self {
             positions: Vec::new(),
             normals: Vec::new(),
-            uvs: Vec::new(),
             indices: Vec::new(),
             next_index: 0,
-            uv_scale,
         }
     }
 
-    fn push_quad(&mut self, verts: [Vec3; 4], mapping: SurfaceUvMapping) {
-        let tex = mapping.compute_uvs(verts, self.uv_scale);
+    fn push_quad(&mut self, verts: [Vec3; 4]) {
         push_quad(
             &mut self.positions,
             &mut self.normals,
-            &mut self.uvs,
             &mut self.indices,
             &mut self.next_index,
             verts,
-            tex,
         );
     }
 
@@ -278,7 +257,6 @@ impl MeshBuffers {
         add_side_face(
             &mut self.positions,
             &mut self.normals,
-            &mut self.uvs,
             &mut self.indices,
             &mut self.next_index,
             top_a,
@@ -286,7 +264,6 @@ impl MeshBuffers {
             bottom_a,
             bottom_b,
             direction,
-            self.uv_scale,
         );
     }
 
@@ -294,7 +271,6 @@ impl MeshBuffers {
         let mut mesh = empty_mesh();
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, self.positions);
         mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, self.normals);
-        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, self.uvs);
         if !self.indices.is_empty() {
             mesh.insert_indices(Indices::U32(self.indices));
         }
@@ -305,34 +281,26 @@ impl MeshBuffers {
 fn push_quad(
     positions: &mut Vec<[f32; 3]>,
     normals: &mut Vec<[f32; 3]>,
-    uvs: &mut Vec<[f32; 2]>,
     indices: &mut Vec<u32>,
     next_index: &mut u32,
     verts: [Vec3; 4],
-    tex: [[f32; 2]; 4],
 ) {
     push_triangle(
-        positions, normals, uvs, indices, next_index, verts[0], verts[1], verts[2], tex[0], tex[1],
-        tex[2],
+        positions, normals, indices, next_index, verts[0], verts[1], verts[2],
     );
     push_triangle(
-        positions, normals, uvs, indices, next_index, verts[0], verts[2], verts[3], tex[0], tex[2],
-        tex[3],
+        positions, normals, indices, next_index, verts[0], verts[2], verts[3],
     );
 }
 
 fn push_triangle(
     positions: &mut Vec<[f32; 3]>,
     normals: &mut Vec<[f32; 3]>,
-    uvs: &mut Vec<[f32; 2]>,
     indices: &mut Vec<u32>,
     next_index: &mut u32,
     a: Vec3,
     b: Vec3,
     c: Vec3,
-    ta: [f32; 2],
-    tb: [f32; 2],
-    tc: [f32; 2],
 ) {
     let normal = (b - a).cross(c - a).normalize_or_zero();
     positions.push(a.to_array());
@@ -341,9 +309,6 @@ fn push_triangle(
     normals.push(normal.to_array());
     normals.push(normal.to_array());
     normals.push(normal.to_array());
-    uvs.push(ta);
-    uvs.push(tb);
-    uvs.push(tc);
     indices.extend_from_slice(&[*next_index, *next_index + 1, *next_index + 2]);
     *next_index += 3;
 }
@@ -351,7 +316,6 @@ fn push_triangle(
 fn add_side_face(
     positions: &mut Vec<[f32; 3]>,
     normals: &mut Vec<[f32; 3]>,
-    uvs: &mut Vec<[f32; 2]>,
     indices: &mut Vec<u32>,
     next_index: &mut u32,
     top_a: Vec3,
@@ -359,7 +323,6 @@ fn add_side_face(
     bottom_a: Vec3,
     bottom_b: Vec3,
     direction: RampDirection,
-    uv_scale: TerrainUvScale,
 ) {
     const EPS: f32 = 1e-4;
     if (top_a.y - bottom_a.y).abs() < EPS && (top_b.y - bottom_b.y).abs() < EPS {
@@ -367,36 +330,7 @@ fn add_side_face(
     }
 
     let verts = [top_a, top_b, bottom_b, bottom_a];
-    let mapping = match direction {
-        RampDirection::North | RampDirection::South => SurfaceUvMapping::XY,
-        RampDirection::West | RampDirection::East => SurfaceUvMapping::ZY,
-    };
-    let tex = mapping.compute_uvs(verts, uv_scale);
-
-    push_quad(positions, normals, uvs, indices, next_index, verts, tex);
-}
-
-#[derive(Clone, Copy)]
-enum SurfaceUvMapping {
-    XZ,
-    XY,
-    ZY,
-}
-
-impl SurfaceUvMapping {
-    fn compute_uvs(self, verts: [Vec3; 4], scale: TerrainUvScale) -> [[f32; 2]; 4] {
-        match self {
-            SurfaceUvMapping::XZ => {
-                verts.map(|v| [v.x * scale.inv_horizontal, v.z * scale.inv_horizontal])
-            }
-            SurfaceUvMapping::XY => {
-                verts.map(|v| [v.x * scale.inv_horizontal, v.y * scale.inv_vertical])
-            }
-            SurfaceUvMapping::ZY => {
-                verts.map(|v| [v.z * scale.inv_horizontal, v.y * scale.inv_vertical])
-            }
-        }
-    }
+    push_quad(positions, normals, indices, next_index, verts);
 }
 
 #[cfg(test)]
@@ -404,132 +338,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn top_faces_cover_full_texture_every_four_tiles() {
-        let mut map = TileMap::new(2, 2);
-        for y in 0..map.height {
-            for x in 0..map.width {
-                let mut tile = map.get(x, y).to_owned();
-                tile.x = x;
-                tile.y = y;
-                map.set(x, y, tile);
-            }
-        }
+    fn terrain_meshes_skip_uv_coordinates() {
+        let mut map = TileMap::new(1, 1);
+        let mut tile = map.get(0, 0).to_owned();
+        tile.x = 0;
+        tile.y = 0;
+        map.set(0, 0, tile);
 
-        let settings = TerrainUvSettings {
-            tiles_per_texture: 4.0,
-        };
-        let mesh = build_map_meshes(&map, &settings)
+        let mesh = build_map_meshes(&map)
             .remove(&TileType::Grass)
             .expect("grass mesh");
 
-        let VertexAttributeValues::Float32x2(uvs) = mesh
-            .attribute(Mesh::ATTRIBUTE_UV_0)
-            .expect("uvs present")
-            .clone()
-        else {
-            panic!("unexpected uv format");
-        };
-
-        assert!(
-            uvs.len() >= 6,
-            "expected at least one quad worth of vertices"
-        );
-
-        let nw = Vec2::from_array(uvs[0]);
-        let sw = Vec2::from_array(uvs[1]);
-        let se = Vec2::from_array(uvs[2]);
-        let ne = Vec2::from_array(uvs[5]);
-
-        let expected = [
-            Vec2::new(0.0, 0.0),
-            Vec2::new(0.0, 0.5),
-            Vec2::new(0.5, 0.5),
-            Vec2::new(0.5, 0.0),
-        ];
-
-        let actual = [nw, sw, se, ne];
-
-        for (idx, (&actual, expected)) in actual.iter().zip(expected.iter()).enumerate() {
-            assert!(
-                actual.distance(*expected) < 1e-6,
-                "uv[{idx}] {actual:?} != {expected:?}"
-            );
-        }
+        assert!(mesh.attribute(Mesh::ATTRIBUTE_UV_0).is_none());
+        assert!(mesh.attribute(Mesh::ATTRIBUTE_NORMAL).is_some());
     }
 
     #[test]
-    fn top_face_uvs_wrap_every_four_tiles() {
-        let mut map = TileMap::new(4, 1);
-        for x in 0..map.width {
-            let mut tile = map.get(x, 0).to_owned();
-            tile.x = x;
-            tile.y = 0;
-            map.set(x, 0, tile);
+    fn side_faces_are_emitted_for_height_changes() {
+        let mut map = TileMap::new(1, 2);
+        for y in 0..map.height {
+            let mut tile = map.get(0, y).to_owned();
+            tile.x = 0;
+            tile.y = y;
+            tile.elevation = y as i8;
+            map.set(0, y, tile);
         }
 
-        let settings = TerrainUvSettings {
-            tiles_per_texture: 4.0,
-        };
-
-        let mesh = build_map_meshes(&map, &settings)
+        let mesh = build_map_meshes(&map)
             .remove(&TileType::Grass)
             .expect("grass mesh");
 
-        let VertexAttributeValues::Float32x2(uvs) = mesh
-            .attribute(Mesh::ATTRIBUTE_UV_0)
-            .expect("uvs present")
-            .clone()
-        else {
-            panic!("unexpected uv format");
+        let Some(Indices::U32(indices)) = mesh.indices() else {
+            panic!("expected indexed mesh");
         };
 
-        assert!(uvs.len() >= 24, "expected four quads worth of vertices");
-
-        let tile_uvs = |tile_index: usize| -> [Vec2; 4] {
-            let start = tile_index * 6;
-            [
-                Vec2::from_array(uvs[start]),
-                Vec2::from_array(uvs[start + 1]),
-                Vec2::from_array(uvs[start + 2]),
-                Vec2::from_array(uvs[start + 5]),
-            ]
-        };
-
-        let first = tile_uvs(0);
-        let second = tile_uvs(1);
-        let third = tile_uvs(2);
-        let fourth = tile_uvs(3);
-
-        let assert_repeats = |a: &[Vec2; 4], b: &[Vec2; 4], label_a: &str, label_b: &str| {
-            for idx in 0..4 {
-                let diff = b[idx] - a[idx];
-                let nearest_x = diff.x.round();
-                let nearest_y = diff.y.round();
-
-                assert!(
-                    (diff.x - nearest_x).abs() < 1e-6,
-                    "tile {label_a} uv[{idx}].x {ax:?} and tile {label_b} uv[{idx}].x {bx:?} differ by a non-integer offset {diff:?}",
-                    label_a = label_a,
-                    idx = idx,
-                    ax = a[idx].x,
-                    label_b = label_b,
-                    bx = b[idx].x,
-                    diff = diff.x,
-                );
-                assert!(
-                    (diff.y - nearest_y).abs() < 1e-6,
-                    "tile {label_a} uv[{idx}].y {ay:?} and tile {label_b} uv[{idx}].y {by:?} differ by a non-integer offset {diff:?}",
-                    label_a = label_a,
-                    idx = idx,
-                    ay = a[idx].y,
-                    label_b = label_b,
-                    by = b[idx].y,
-                    diff = diff.y,
-                );
-            }
-        };
-
-        assert_repeats(&first, &third, "0", "2");
-        assert_repeats(&second, &fourth, "1", "3");
+        assert!(indices.len() >= 6, "expected at least two triangles");
     }
 }
