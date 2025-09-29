@@ -56,6 +56,19 @@ impl Default for TileType {
     }
 }
 
+impl TileType {
+    pub const ALL: [TileType; 4] = [
+        TileType::Grass,
+        TileType::Dirt,
+        TileType::Cliff,
+        TileType::Rock,
+    ];
+
+    pub fn as_index(self) -> usize {
+        self as usize
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Encode, Decode)]
 pub struct Tile {
     pub kind: TileKind,

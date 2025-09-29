@@ -64,98 +64,24 @@ pub fn build_map_meshes(map: &TileMap) -> HashMap<TileType, Mesh> {
         return result;
     }
 
-    let mut corner_cache = vec![[0.0f32; 4]; (map.width * map.height) as usize];
-    for y in 0..map.height {
-        for x in 0..map.width {
-            let idx = map.idx(x, y);
-            corner_cache[idx] = tile_corner_heights(map, x, y);
-        }
-    }
-
     let mut buffers: HashMap<TileType, MeshBuffers> = HashMap::new();
-
-    for y in 0..map.height {
-        for x in 0..map.width {
-            let idx = map.idx(x, y);
-            let tile = map.get(x, y);
-            let corners = corner_cache[idx];
-            let x0 = x as f32 * TILE_SIZE;
-            let x1 = x0 + TILE_SIZE;
-            let z0 = y as f32 * TILE_SIZE;
-            let z1 = z0 + TILE_SIZE;
-
-            let buffer = buffers.entry(tile.tile_type).or_default();
-
-            let nw = Vec3::new(x0, corners[CORNER_NW], z0);
-            let ne = Vec3::new(x1, corners[CORNER_NE], z0);
-            let sw = Vec3::new(x0, corners[CORNER_SW], z1);
-            let se = Vec3::new(x1, corners[CORNER_SE], z1);
-
-            buffer.push_quad([nw, sw, se, ne], [[0.0, 0.0]; 4]);
-
-            let (bnw, bne) = if y > 0 {
-                let neighbor = corner_cache[map.idx(x, y - 1)];
-                (neighbor[CORNER_SW], neighbor[CORNER_SE])
-            } else {
-                (0.0, 0.0)
-            };
-            buffer.add_side_face(
-                nw,
-                ne,
-                Vec3::new(x0, bnw.min(nw.y), z0),
-                Vec3::new(x1, bne.min(ne.y), z0),
-                RampDirection::North,
-            );
-
-            let (bsw, bse) = if y + 1 < map.height {
-                let neighbor = corner_cache[map.idx(x, y + 1)];
-                (neighbor[CORNER_NW], neighbor[CORNER_NE])
-            } else {
-                (0.0, 0.0)
-            };
-            buffer.add_side_face(
-                se,
-                sw,
-                Vec3::new(x1, bse.min(se.y), z1),
-                Vec3::new(x0, bsw.min(sw.y), z1),
-                RampDirection::South,
-            );
-
-            let (bnw, bsw) = if x > 0 {
-                let neighbor = corner_cache[map.idx(x - 1, y)];
-                (neighbor[CORNER_NE], neighbor[CORNER_SE])
-            } else {
-                (0.0, 0.0)
-            };
-            buffer.add_side_face(
-                sw,
-                nw,
-                Vec3::new(x0, bsw.min(sw.y), z1),
-                Vec3::new(x0, bnw.min(nw.y), z0),
-                RampDirection::West,
-            );
-
-            let (bne, bse) = if x + 1 < map.width {
-                let neighbor = corner_cache[map.idx(x + 1, y)];
-                (neighbor[CORNER_NW], neighbor[CORNER_SW])
-            } else {
-                (0.0, 0.0)
-            };
-            buffer.add_side_face(
-                ne,
-                se,
-                Vec3::new(x1, bne.min(ne.y), z0),
-                Vec3::new(x1, bse.min(se.y), z1),
-                RampDirection::East,
-            );
-        }
-    }
+    populate_mesh_buffers(map, Some(&mut buffers), None);
 
     for (tile_type, buffer) in buffers {
         result.insert(tile_type, buffer.into_mesh());
     }
 
     result
+}
+
+pub fn build_combined_mesh(map: &TileMap) -> Mesh {
+    if map.width == 0 || map.height == 0 {
+        return empty_mesh();
+    }
+
+    let mut combined = MeshBuffers::new(true);
+    populate_mesh_buffers(map, None, Some(&mut combined));
+    combined.into_mesh()
 }
 
 fn find_ramp_target(map: &TileMap, x: u32, y: u32, base: f32) -> Option<(RampDirection, f32)> {
@@ -195,26 +121,211 @@ fn ramp_neighbor_height(
     if height < base { Some(height) } else { None }
 }
 
+fn build_corner_cache(map: &TileMap) -> Vec<[f32; 4]> {
+    let mut cache = vec![[0.0f32; 4]; (map.width * map.height) as usize];
+    for y in 0..map.height {
+        for x in 0..map.width {
+            let idx = map.idx(x, y);
+            cache[idx] = tile_corner_heights(map, x, y);
+        }
+    }
+    cache
+}
+
+fn populate_mesh_buffers(
+    map: &TileMap,
+    mut per_type: Option<&mut HashMap<TileType, MeshBuffers>>,
+    mut combined: Option<&mut MeshBuffers>,
+) {
+    let corner_cache = build_corner_cache(map);
+
+    for y in 0..map.height {
+        for x in 0..map.width {
+            let idx = map.idx(x, y);
+            let tile = map.get(x, y);
+            let corners = corner_cache[idx];
+            let x0 = x as f32 * TILE_SIZE;
+            let x1 = x0 + TILE_SIZE;
+            let z0 = y as f32 * TILE_SIZE;
+            let z1 = z0 + TILE_SIZE;
+
+            let nw = Vec3::new(x0, corners[CORNER_NW], z0);
+            let ne = Vec3::new(x1, corners[CORNER_NE], z0);
+            let sw = Vec3::new(x0, corners[CORNER_SW], z1);
+            let se = Vec3::new(x1, corners[CORNER_SE], z1);
+
+            let north_neighbor = if y > 0 {
+                corner_cache[map.idx(x, y - 1)]
+            } else {
+                [0.0; 4]
+            };
+            let south_neighbor = if y + 1 < map.height {
+                corner_cache[map.idx(x, y + 1)]
+            } else {
+                [0.0; 4]
+            };
+            let west_neighbor = if x > 0 {
+                corner_cache[map.idx(x - 1, y)]
+            } else {
+                [0.0; 4]
+            };
+            let east_neighbor = if x + 1 < map.width {
+                corner_cache[map.idx(x + 1, y)]
+            } else {
+                [0.0; 4]
+            };
+
+            let north_bottom_a = Vec3::new(x0, north_neighbor[CORNER_SW].min(nw.y), z0);
+            let north_bottom_b = Vec3::new(x1, north_neighbor[CORNER_SE].min(ne.y), z0);
+            let south_bottom_a = Vec3::new(x1, south_neighbor[CORNER_NE].min(se.y), z1);
+            let south_bottom_b = Vec3::new(x0, south_neighbor[CORNER_NW].min(sw.y), z1);
+            let west_bottom_a = Vec3::new(x0, west_neighbor[CORNER_SE].min(sw.y), z1);
+            let west_bottom_b = Vec3::new(x0, west_neighbor[CORNER_NE].min(nw.y), z0);
+            let east_bottom_a = Vec3::new(x1, east_neighbor[CORNER_NW].min(ne.y), z0);
+            let east_bottom_b = Vec3::new(x1, east_neighbor[CORNER_SW].min(se.y), z1);
+
+            if let Some(buffers) = per_type.as_mut() {
+                let buffer = buffers
+                    .entry(tile.tile_type)
+                    .or_insert_with(|| MeshBuffers::new(false));
+                buffer.push_quad([nw, sw, se, ne], [[0.0, 0.0]; 4], None);
+                buffer.add_side_face(
+                    nw,
+                    ne,
+                    north_bottom_a,
+                    north_bottom_b,
+                    RampDirection::North,
+                    None,
+                );
+                buffer.add_side_face(
+                    se,
+                    sw,
+                    south_bottom_a,
+                    south_bottom_b,
+                    RampDirection::South,
+                    None,
+                );
+                buffer.add_side_face(
+                    sw,
+                    nw,
+                    west_bottom_a,
+                    west_bottom_b,
+                    RampDirection::West,
+                    None,
+                );
+                buffer.add_side_face(
+                    ne,
+                    se,
+                    east_bottom_a,
+                    east_bottom_b,
+                    RampDirection::East,
+                    None,
+                );
+            }
+
+            if let Some(combined_buffer) = combined.as_mut() {
+                let tile_value = [tile.tile_type.as_index() as f32, 0.0];
+                combined_buffer.push_quad([nw, sw, se, ne], [[0.0, 0.0]; 4], Some(tile_value));
+                combined_buffer.add_side_face(
+                    nw,
+                    ne,
+                    north_bottom_a,
+                    north_bottom_b,
+                    RampDirection::North,
+                    Some(tile_value),
+                );
+                combined_buffer.add_side_face(
+                    se,
+                    sw,
+                    south_bottom_a,
+                    south_bottom_b,
+                    RampDirection::South,
+                    Some(tile_value),
+                );
+                combined_buffer.add_side_face(
+                    sw,
+                    nw,
+                    west_bottom_a,
+                    west_bottom_b,
+                    RampDirection::West,
+                    Some(tile_value),
+                );
+                combined_buffer.add_side_face(
+                    ne,
+                    se,
+                    east_bottom_a,
+                    east_bottom_b,
+                    RampDirection::East,
+                    Some(tile_value),
+                );
+            }
+        }
+    }
+}
+
 #[derive(Default)]
 struct MeshBuffers {
     positions: Vec<[f32; 3]>,
     normals: Vec<[f32; 3]>,
     uvs: Vec<[f32; 2]>,
+    tile_types: Vec<[f32; 2]>,
     indices: Vec<u32>,
     next_index: u32,
+    record_tile_types: bool,
 }
 
 impl MeshBuffers {
-    fn push_quad(&mut self, verts: [Vec3; 4], tex: [[f32; 2]; 4]) {
-        push_quad(
-            &mut self.positions,
-            &mut self.normals,
-            &mut self.uvs,
-            &mut self.indices,
-            &mut self.next_index,
-            verts,
-            tex,
-        );
+    fn new(record_tile_types: bool) -> Self {
+        Self {
+            positions: Vec::new(),
+            normals: Vec::new(),
+            uvs: Vec::new(),
+            tile_types: Vec::new(),
+            indices: Vec::new(),
+            next_index: 0,
+            record_tile_types,
+        }
+    }
+
+    fn push_quad(&mut self, verts: [Vec3; 4], tex: [[f32; 2]; 4], tile: Option<[f32; 2]>) {
+        self.push_triangle(verts[0], verts[1], verts[2], tex[0], tex[1], tex[2], tile);
+        self.push_triangle(verts[0], verts[2], verts[3], tex[0], tex[2], tex[3], tile);
+    }
+
+    fn push_triangle(
+        &mut self,
+        a: Vec3,
+        b: Vec3,
+        c: Vec3,
+        ta: [f32; 2],
+        tb: [f32; 2],
+        tc: [f32; 2],
+        tile: Option<[f32; 2]>,
+    ) {
+        let normal = (b - a).cross(c - a).normalize_or_zero();
+        self.positions.push(a.to_array());
+        self.positions.push(b.to_array());
+        self.positions.push(c.to_array());
+        self.normals.push(normal.to_array());
+        self.normals.push(normal.to_array());
+        self.normals.push(normal.to_array());
+        self.uvs.push(ta);
+        self.uvs.push(tb);
+        self.uvs.push(tc);
+
+        if self.record_tile_types {
+            let info = tile.unwrap_or([0.0, 0.0]);
+            self.tile_types.push(info);
+            self.tile_types.push(info);
+            self.tile_types.push(info);
+        }
+
+        self.indices.extend_from_slice(&[
+            self.next_index,
+            self.next_index + 1,
+            self.next_index + 2,
+        ]);
+        self.next_index += 3;
     }
 
     fn add_side_face(
@@ -224,19 +335,22 @@ impl MeshBuffers {
         bottom_a: Vec3,
         bottom_b: Vec3,
         direction: RampDirection,
+        tile: Option<[f32; 2]>,
     ) {
-        add_side_face(
-            &mut self.positions,
-            &mut self.normals,
-            &mut self.uvs,
-            &mut self.indices,
-            &mut self.next_index,
-            top_a,
-            top_b,
-            bottom_a,
-            bottom_b,
-            direction,
-        );
+        const EPS: f32 = 1e-4;
+        if (top_a.y - bottom_a.y).abs() < EPS && (top_b.y - bottom_b.y).abs() < EPS {
+            return;
+        }
+
+        let verts = [top_a, top_b, bottom_b, bottom_a];
+        let tex = match direction {
+            RampDirection::North => [[0.0, 0.0]; 4],
+            RampDirection::South => [[0.0, 0.0]; 4],
+            RampDirection::West => [[0.0, 0.0]; 4],
+            RampDirection::East => [[0.0, 0.0]; 4],
+        };
+
+        self.push_quad(verts, tex, tile);
     }
 
     fn into_mesh(self) -> Mesh {
@@ -244,82 +358,12 @@ impl MeshBuffers {
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, self.positions);
         mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, self.normals);
         mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, self.uvs);
+        if self.record_tile_types && !self.tile_types.is_empty() {
+            mesh.insert_attribute(Mesh::ATTRIBUTE_UV_1, self.tile_types);
+        }
         if !self.indices.is_empty() {
             mesh.insert_indices(Indices::U32(self.indices));
         }
         mesh
     }
-}
-
-fn push_quad(
-    positions: &mut Vec<[f32; 3]>,
-    normals: &mut Vec<[f32; 3]>,
-    uvs: &mut Vec<[f32; 2]>,
-    indices: &mut Vec<u32>,
-    next_index: &mut u32,
-    verts: [Vec3; 4],
-    tex: [[f32; 2]; 4],
-) {
-    push_triangle(
-        positions, normals, uvs, indices, next_index, verts[0], verts[1], verts[2], tex[0], tex[1],
-        tex[2],
-    );
-    push_triangle(
-        positions, normals, uvs, indices, next_index, verts[0], verts[2], verts[3], tex[0], tex[2],
-        tex[3],
-    );
-}
-
-fn push_triangle(
-    positions: &mut Vec<[f32; 3]>,
-    normals: &mut Vec<[f32; 3]>,
-    uvs: &mut Vec<[f32; 2]>,
-    indices: &mut Vec<u32>,
-    next_index: &mut u32,
-    a: Vec3,
-    b: Vec3,
-    c: Vec3,
-    ta: [f32; 2],
-    tb: [f32; 2],
-    tc: [f32; 2],
-) {
-    let normal = (b - a).cross(c - a).normalize_or_zero();
-    positions.push(a.to_array());
-    positions.push(b.to_array());
-    positions.push(c.to_array());
-    normals.push(normal.to_array());
-    normals.push(normal.to_array());
-    normals.push(normal.to_array());
-    uvs.push(ta);
-    uvs.push(tb);
-    uvs.push(tc);
-    indices.extend_from_slice(&[*next_index, *next_index + 1, *next_index + 2]);
-    *next_index += 3;
-}
-
-fn add_side_face(
-    positions: &mut Vec<[f32; 3]>,
-    normals: &mut Vec<[f32; 3]>,
-    uvs: &mut Vec<[f32; 2]>,
-    indices: &mut Vec<u32>,
-    next_index: &mut u32,
-    top_a: Vec3,
-    top_b: Vec3,
-    bottom_a: Vec3,
-    bottom_b: Vec3,
-    direction: RampDirection,
-) {
-    const EPS: f32 = 1e-4;
-    if (top_a.y - bottom_a.y).abs() < EPS && (top_b.y - bottom_b.y).abs() < EPS {
-        return;
-    }
-
-    let (verts, tex) = match direction {
-        RampDirection::North => ([top_a, top_b, bottom_b, bottom_a], [[0.0, 0.0]; 4]),
-        RampDirection::South => ([top_a, top_b, bottom_b, bottom_a], [[0.0, 0.0]; 4]),
-        RampDirection::West => ([top_a, top_b, bottom_b, bottom_a], [[0.0, 0.0]; 4]),
-        RampDirection::East => ([top_a, top_b, bottom_b, bottom_a], [[0.0, 0.0]; 4]),
-    };
-
-    push_quad(positions, normals, uvs, indices, next_index, verts, tex);
 }

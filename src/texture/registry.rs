@@ -55,6 +55,8 @@ impl TerrainTextureRegistry {
             specular.map(|s| s.to_string()),
         );
 
+        material::set_material_tile_override(materials, &material, tile_type);
+
         self.register_loaded(TerrainTextureEntry {
             tile_type,
             name: name.into(),

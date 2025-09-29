@@ -1,5 +1,5 @@
 use crate::terrain;
-use crate::texture::material::TerrainMaterial;
+use crate::texture::material::{self, TerrainMaterial, TerrainTextureArray};
 use crate::texture::registry::TerrainTextureRegistry;
 use crate::types::*;
 use bevy::pbr::MaterialMeshBundle;
@@ -19,6 +19,7 @@ impl Plugin for EditorPlugin {
                     update_hover,
                     paint_tiles,
                     rotate_ramps,
+                    update_texture_array,
                     rebuild_terrain_mesh,
                     draw_hover_highlight,
                 ),
@@ -59,18 +60,26 @@ impl Default for EditorState {
 #[derive(Resource)]
 struct TerrainVisual {
     layers: std::collections::HashMap<TileType, TerrainLayer>,
+    combined: Option<CombinedTerrain>,
 }
 
 impl Default for TerrainVisual {
     fn default() -> Self {
         Self {
             layers: std::collections::HashMap::new(),
+            combined: None,
         }
     }
 }
 
 struct TerrainLayer {
     mesh: Handle<Mesh>,
+    _entity: Entity,
+}
+
+struct CombinedTerrain {
+    mesh: Handle<Mesh>,
+    material: Handle<TerrainMaterial>,
     _entity: Entity,
 }
 
@@ -136,6 +145,26 @@ fn spawn_editor_assets(
             },
         );
     }
+
+    let combined_mesh = meshes.add(terrain::empty_mesh());
+    let combined_material = material::configure_runtime_material(&mut mats);
+    let combined_entity = commands
+        .spawn((
+            MaterialMeshBundle {
+                mesh: combined_mesh.clone(),
+                material: combined_material.clone(),
+                transform: Transform::default(),
+                ..default()
+            },
+            Visibility::Hidden,
+        ))
+        .id();
+
+    visual.combined = Some(CombinedTerrain {
+        mesh: combined_mesh,
+        material: combined_material,
+        _entity: combined_entity,
+    });
 
     commands.insert_resource(visual);
 }
@@ -335,6 +364,13 @@ fn rebuild_terrain_mesh(
     }
     state.map_dirty = false;
 
+    let combined_mesh = terrain::build_combined_mesh(&state.map);
+    if let Some(combined) = &visual.combined {
+        if let Some(existing) = meshes.get_mut(&combined.mesh) {
+            *existing = combined_mesh;
+        }
+    }
+
     let mesh_map = terrain::build_map_meshes(&state.map);
 
     for (tile_type, layer) in &visual.layers {
@@ -345,6 +381,69 @@ fn rebuild_terrain_mesh(
 
         if let Some(existing) = meshes.get_mut(&layer.mesh) {
             *existing = mesh;
+        }
+    }
+}
+
+fn update_texture_array(
+    registry: Res<TerrainTextureRegistry>,
+    mut texture_array: ResMut<TerrainTextureArray>,
+    mut images: ResMut<Assets<Image>>,
+    mut materials: ResMut<Assets<TerrainMaterial>>,
+    visual: Option<Res<TerrainVisual>>,
+) {
+    let mut handle_to_use = texture_array.base_color.clone();
+
+    if registry.is_changed() || handle_to_use.is_none() {
+        let array_image = {
+            let mut layers = Vec::new();
+            for tile_type in TileType::ALL {
+                let Some(entry) = registry.get(tile_type) else {
+                    return;
+                };
+                let Some(image) = images.get(&entry.icon) else {
+                    return;
+                };
+                layers.push(image);
+            }
+            material::build_texture_array_image(&layers)
+        };
+
+        let Some(array_image) = array_image else {
+            return;
+        };
+
+        let handle = images.add(array_image);
+        texture_array.base_color = Some(handle.clone());
+        texture_array.layer_count = TileType::ALL.len() as u32;
+        handle_to_use = Some(handle);
+    }
+
+    let Some(array_handle) = handle_to_use else {
+        return;
+    };
+
+    if texture_array.layer_count == 0 {
+        return;
+    }
+
+    for tile_type in TileType::ALL {
+        if let Some(entry) = registry.get(tile_type) {
+            if let Some(material) = materials.get_mut(&entry.material) {
+                material.extension.base_color_array = array_handle.clone();
+                material.extension.params.layer_count = texture_array.layer_count;
+                material.extension.params.tile_type_override = tile_type.as_index() as i32;
+            }
+        }
+    }
+
+    if let Some(visual) = visual {
+        if let Some(combined) = &visual.combined {
+            if let Some(material) = materials.get_mut(&combined.material) {
+                material.extension.base_color_array = array_handle;
+                material.extension.params.layer_count = texture_array.layer_count;
+                material.extension.params.tile_type_override = -1;
+            }
         }
     }
 }

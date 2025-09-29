@@ -22,16 +22,20 @@
 #import bevy_pbr::meshlet_visibility_buffer_resolve::resolve_vertex_output
 #endif
 
-struct TerrainMaterialExtension {
+struct TerrainMaterialParams {
     uv_scale: f32,
+    tile_type_override: i32,
+    layer_count: u32,
+    _pad: u32,
 }
 
 @group(2) @binding(100)
-var<uniform> terrain_material_extension: TerrainMaterialExtension;
+var<uniform> terrain_material_params: TerrainMaterialParams;
+@group(2) @binding(101)
+var terrain_base_color_array: texture_2d_array<f32>;
 
-fn triplanar_sample(
-    tex: texture_2d<f32>,
-    samp: sampler,
+fn triplanar_sample_array(
+    layer: i32,
     pos: vec3<f32>,
     norm: vec3<f32>,
     scale: f32
@@ -44,9 +48,10 @@ fn triplanar_sample(
     let uv_y = fract(pos.xz * scale);
     let uv_z = fract(pos.xy * scale);
 
-    let x_tex = textureSample(tex, samp, uv_x);
-    let y_tex = textureSample(tex, samp, uv_y);
-    let z_tex = textureSample(tex, samp, uv_z);
+    let layer_f = f32(layer);
+    let x_tex = textureSample(terrain_base_color_array, pbr_bindings::base_color_sampler, vec3<f32>(uv_x, layer_f));
+    let y_tex = textureSample(terrain_base_color_array, pbr_bindings::base_color_sampler, vec3<f32>(uv_y, layer_f));
+    let z_tex = textureSample(terrain_base_color_array, pbr_bindings::base_color_sampler, vec3<f32>(uv_z, layer_f));
 
     return x_tex * weights.x + y_tex * weights.y + z_tex * weights.z;
 }
@@ -77,32 +82,24 @@ fn fragment(
 
     // Choose projection by dominant world normal axis
     let an = abs(pbr_input.N); // vec3<f32>
-    let scale = terrain_material_extension.uv_scale;
-    var uv: vec2<f32>;
+    if (terrain_material_params.layer_count > 0u) {
+        var desired_layer = terrain_material_params.tile_type_override;
+        if (desired_layer < 0) {
+            desired_layer = i32(round(in.uv1.x));
+        }
+        let max_layer = i32(terrain_material_params.layer_count) - 1;
+        let clamped_layer = clamp(desired_layer, 0, max_layer);
 
-    if (an.y >= max(an.x, an.z)) {
-        // tops: project to XZ
-        uv = pbr_input.world_position.xz * scale;
-    } else if (an.x >= an.z) {
-        // ±X sides: project to YZ
-        uv = pbr_input.world_position.yz * scale;
+        let world_base = triplanar_sample_array(
+            clamped_layer,
+            pbr_input.world_position.xyz,
+            pbr_input.world_normal.xyz,
+            terrain_material_params.uv_scale,
+        );
+        pbr_input.material.base_color = alpha_discard(pbr_input.material, world_base);
     } else {
-        // ±Z sides: project to XY
-        uv = pbr_input.world_position.xy * scale;
+        pbr_input.material.base_color = alpha_discard(pbr_input.material, pbr_input.material.base_color);
     }
-
-    // Sample base color using world-space planar UVs
-    let world_base = triplanar_sample(
-        pbr_bindings::base_color_texture,
-        pbr_bindings::base_color_sampler,
-        pbr_input.world_position.xyz,
-        pbr_input.world_normal.xyz,
-        terrain_material_extension.uv_scale,
-    );
-    pbr_input.material.base_color = alpha_discard(pbr_input.material, world_base);
-
-//    // Alpha discard + lighting as before
-//    pbr_input.material.base_color = alpha_discard(pbr_input.material, pbr_input.material.base_color);
 
 
 #ifdef PREPASS_PIPELINE
