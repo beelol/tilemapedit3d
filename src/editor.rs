@@ -227,13 +227,11 @@ fn paint_tiles(
                 None
             };
 
-            let tile_type = current.tile_type.clone();
             if current.kind != kind
                 || current.elevation != elevation
                 || current.ramp_direction != target_ramp_direction
                 || current.tile_type != tile_type
             {
-                let tile_type = current.tile_type.clone();
                 state_ref.map.set(
                     x,
                     y,
