@@ -40,7 +40,7 @@ fn setup_runtime_mesh(
                 mesh: mesh.clone(),
                 material: material.clone(),
                 transform: Transform::default(),
-                visibility: Visibility::Hidden,
+                visibility: Visibility::Visible,
                 ..default()
             },
             Name::new("RuntimeTerrain"),

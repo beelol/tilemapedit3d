@@ -78,7 +78,6 @@ impl Default for TerrainVisual {
 
 struct TerrainLayer {
     mesh: Handle<Mesh>,
-    _entity: Entity,
 }
 
 #[derive(Default, Reflect, GizmoConfigGroup)]
@@ -149,22 +148,18 @@ fn spawn_editor_assets(
 
     for entry in textures.iter() {
         let mesh = meshes.add(terrain::empty_mesh());
-        let entity = commands
-            .spawn(MaterialMeshBundle {
+        commands.spawn((
+            MaterialMeshBundle {
                 mesh: mesh.clone(),
                 material: entry.material.clone(),
                 transform: Transform::default(),
+                visibility: Visibility::Hidden,
                 ..default()
-            })
-            .id();
-
-        visual.layers.insert(
-            entry.tile_type,
-            TerrainLayer {
-                mesh,
-                _entity: entity,
             },
-        );
+            Name::new(format!("EditorTerrain::{tile_type:?}")),
+        ));
+
+        visual.layers.insert(entry.tile_type, TerrainLayer { mesh });
     }
 
     commands.insert_resource(visual);
