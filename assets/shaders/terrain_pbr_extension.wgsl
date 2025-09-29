@@ -29,6 +29,31 @@ struct TerrainMaterialExtension {
 @group(2) @binding(100)
 var<uniform> terrain_material_extension: TerrainMaterialExtension;
 
+fn triplanar_sample(
+    tex: texture_2d<f32>,
+    samp: sampler,
+    pos: vec3<f32>,
+    norm: vec3<f32>,
+    scale: f32
+) -> vec4<f32> {
+    let n = normalize(norm);
+    let weights = abs(n) / (abs(n.x) + abs(n.y) + abs(n.z));
+
+    // Wrap each projection into [0,1)
+    let uv_x = fract(pos.yz * scale);
+    let uv_y = fract(pos.xz * scale);
+    let uv_z = fract(pos.xy * scale);
+
+    let x_tex = textureSample(tex, samp, uv_x);
+    let y_tex = textureSample(tex, samp, uv_y);
+    let z_tex = textureSample(tex, samp, uv_z);
+
+    return x_tex * weights.x + y_tex * weights.y + z_tex * weights.z;
+}
+
+
+
+
 @fragment
 fn fragment(
 #ifdef MESHLET_MESH_MATERIAL_PASS
@@ -47,26 +72,38 @@ fn fragment(
     pbr_functions::visibility_range_dither(in.position, in.visibility_range_dither);
 #endif
 
-    let offset = in.world_position.xz - floor(in.world_position.xz);
-    let world_uv = fract(in.world_position.xz * terrain_material_extension.uv_scale);
+    // Build PBR input (uses mesh UVs initially)
+    var pbr_input = pbr_input_from_standard_material(in, is_front);
 
+    // Choose projection by dominant world normal axis
+    let an = abs(pbr_input.N); // vec3<f32>
+    let scale = terrain_material_extension.uv_scale;
+    var uv: vec2<f32>;
 
-   // Build PBR input (does default texture lookups using mesh UVs)
-   var pbr_input = pbr_input_from_standard_material(in, is_front);
+    if (an.y >= max(an.x, an.z)) {
+        // tops: project to XZ
+        uv = pbr_input.world_position.xz * scale;
+    } else if (an.x >= an.z) {
+        // ±X sides: project to YZ
+        uv = pbr_input.world_position.yz * scale;
+    } else {
+        // ±Z sides: project to XY
+        uv = pbr_input.world_position.xy * scale;
+    }
 
-   // Override the base_color using world_uv
-   let world_base = textureSample(
-       pbr_bindings::base_color_texture,
-       pbr_bindings::base_color_sampler,
-       world_uv,
-   );
-   pbr_input.material.base_color = world_base;
-
-
-   pbr_input.material.base_color = alpha_discard(
-        pbr_input.material,
-        pbr_input.material.base_color,
+    // Sample base color using world-space planar UVs
+    let world_base = triplanar_sample(
+        pbr_bindings::base_color_texture,
+        pbr_bindings::base_color_sampler,
+        pbr_input.world_position.xyz,
+        pbr_input.world_normal.xyz,
+        terrain_material_extension.uv_scale,
     );
+    pbr_input.material.base_color = alpha_discard(pbr_input.material, world_base);
+
+//    // Alpha discard + lighting as before
+//    pbr_input.material.base_color = alpha_discard(pbr_input.material, pbr_input.material.base_color);
+
 
 #ifdef PREPASS_PIPELINE
     let out = deferred_output(in, pbr_input);
@@ -83,4 +120,3 @@ fn fragment(
 
     return out;
 }
-
