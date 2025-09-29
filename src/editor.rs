@@ -1,6 +1,8 @@
 use crate::terrain;
+use crate::texture::material::TerrainMaterial;
 use crate::texture::registry::TerrainTextureRegistry;
 use crate::types::*;
+use bevy::pbr::MaterialMeshBundle;
 use bevy::prelude::*;
 use bevy_egui::EguiContexts;
 
@@ -83,7 +85,7 @@ fn configure_hover_gizmos(mut configs: ResMut<GizmoConfigStore>) {
 
 fn spawn_editor_assets(
     mut commands: Commands,
-    mut mats: ResMut<Assets<StandardMaterial>>,
+    mut mats: ResMut<Assets<TerrainMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     asset_server: Res<AssetServer>,
     mut textures: ResMut<TerrainTextureRegistry>,
@@ -118,7 +120,7 @@ fn spawn_editor_assets(
     for entry in textures.iter() {
         let mesh = meshes.add(terrain::empty_mesh());
         let entity = commands
-            .spawn(PbrBundle {
+            .spawn(MaterialMeshBundle {
                 mesh: mesh.clone(),
                 material: entry.material.clone(),
                 transform: Transform::default(),
