@@ -23,7 +23,7 @@ fn ui_panel(
         .map(|entry| PaletteItem {
             tile_type: entry.tile_type,
             name: entry.name.clone(),
-            texture: egui_ctx.add_image(entry.icon.clone_weak()),
+            texture: egui_ctx.add_image(entry.preview.clone_weak()),
         })
         .collect();
 

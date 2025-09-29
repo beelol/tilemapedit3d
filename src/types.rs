@@ -50,6 +50,24 @@ pub enum TileType {
     Rock,
 }
 
+impl TileType {
+    pub const ALL: [TileType; 4] = [
+        TileType::Grass,
+        TileType::Dirt,
+        TileType::Cliff,
+        TileType::Rock,
+    ];
+
+    pub fn as_index(self) -> usize {
+        match self {
+            TileType::Grass => 0,
+            TileType::Dirt => 1,
+            TileType::Cliff => 2,
+            TileType::Rock => 3,
+        }
+    }
+}
+
 impl Default for TileType {
     fn default() -> Self {
         TileType::Grass

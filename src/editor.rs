@@ -19,9 +19,16 @@ impl Plugin for EditorPlugin {
                     update_hover,
                     paint_tiles,
                     rotate_ramps,
-                    rebuild_terrain_mesh,
                     draw_hover_highlight,
                 ),
+            )
+            .add_systems(
+                Update,
+                rebuild_terrain_mesh.in_set(terrain::TerrainMeshSet::Rebuild),
+            )
+            .add_systems(
+                Update,
+                mark_map_clean.in_set(terrain::TerrainMeshSet::Cleanup),
             );
     }
 }
@@ -90,30 +97,53 @@ fn spawn_editor_assets(
     asset_server: Res<AssetServer>,
     mut textures: ResMut<TerrainTextureRegistry>,
 ) {
-    textures.load_and_register(
-        TileType::Grass,
-        "Rocky Terrain",
-        &asset_server,
-        &mut mats,
-        "textures/terrain/rocky_terrain_02_diff_1k.png",
-        Some("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
-        // Some("textures/terrain/rocky_terrain_02_rough_1k.exr"),
-        None,
-        // Some("textures/terrain/rocky_terrain_02_spec_1k.png"),
-        None,
-    );
+    let texture_defs = [
+        (
+            TileType::Grass,
+            "Rocky Terrain",
+            "textures/terrain/rocky_terrain_02_diff_1k.png",
+            Some("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
+            None,
+            None,
+        ),
+        (
+            TileType::Dirt,
+            "Worn Soil",
+            "textures/terrain/rocky_terrain_02_diff_1k.png",
+            Some("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
+            None,
+            None,
+        ),
+        (
+            TileType::Cliff,
+            "Cliff Rock",
+            "textures/terrain/rock/aerial_ground_rock_diff_1k.png",
+            Some("textures/terrain/rock/aerial_ground_rock_nor_gl_1k_fixed.exr"),
+            Some("textures/terrain/rock/aerial_ground_rock_rough_1k.png"),
+            None,
+        ),
+        (
+            TileType::Rock,
+            "Ground Rock",
+            "textures/terrain/rock/aerial_ground_rock_diff_1k.png",
+            Some("textures/terrain/rock/aerial_ground_rock_nor_gl_1k_fixed.exr"),
+            Some("textures/terrain/rock/aerial_ground_rock_rough_1k.png"),
+            None,
+        ),
+    ];
 
-    textures.load_and_register(
-        TileType::Rock,
-        "Ground Rock",
-        &asset_server,
-        &mut mats,
-        "textures/terrain/rock/aerial_ground_rock_diff_1k.png",
-        Some("textures/terrain/rock/aerial_ground_rock_nor_gl_1k_fixed.exr"),
-        Some("textures/terrain/rock/aerial_ground_rock_rough_1k.png"),
-        // Some("textures/terrain/rocky_terrain_02_spec_1k.png"),
-        None,
-    );
+    for (tile_type, name, base, normal, roughness, specular) in texture_defs {
+        textures.load_and_register(
+            tile_type,
+            name,
+            &asset_server,
+            &mut mats,
+            base,
+            normal,
+            roughness,
+            specular,
+        );
+    }
 
     let mut visual = TerrainVisual::default();
 
@@ -333,7 +363,6 @@ fn rebuild_terrain_mesh(
     if !state.map_dirty {
         return;
     }
-    state.map_dirty = false;
 
     let mesh_map = terrain::build_map_meshes(&state.map);
 
@@ -346,6 +375,12 @@ fn rebuild_terrain_mesh(
         if let Some(existing) = meshes.get_mut(&layer.mesh) {
             *existing = mesh;
         }
+    }
+}
+
+fn mark_map_clean(mut state: ResMut<EditorState>) {
+    if state.map_dirty {
+        state.map_dirty = false;
     }
 }
 
