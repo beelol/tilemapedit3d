@@ -1,6 +1,8 @@
 use crate::terrain;
+use crate::texture::material::{TerrainMaterial, TerrainMaterialSettings};
 use crate::texture::registry::TerrainTextureRegistry;
 use crate::types::*;
+use bevy::pbr::MaterialMeshBundle;
 use bevy::prelude::*;
 use bevy_egui::EguiContexts;
 
@@ -83,16 +85,18 @@ fn configure_hover_gizmos(mut configs: ResMut<GizmoConfigStore>) {
 
 fn spawn_editor_assets(
     mut commands: Commands,
-    mut mats: ResMut<Assets<StandardMaterial>>,
+    mut mats: ResMut<Assets<TerrainMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     asset_server: Res<AssetServer>,
     mut textures: ResMut<TerrainTextureRegistry>,
+    settings: Res<TerrainMaterialSettings>,
 ) {
     textures.load_and_register(
         TileType::Grass,
         "Rocky Terrain",
         &asset_server,
         &mut mats,
+        &settings,
         "textures/terrain/rocky_terrain_02_diff_1k.png",
         Some("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
         // Some("textures/terrain/rocky_terrain_02_rough_1k.exr"),
@@ -106,6 +110,7 @@ fn spawn_editor_assets(
         "Ground Rock",
         &asset_server,
         &mut mats,
+        &settings,
         "textures/terrain/rock/aerial_ground_rock_diff_1k.png",
         Some("textures/terrain/rock/aerial_ground_rock_nor_gl_1k_fixed.exr"),
         Some("textures/terrain/rock/aerial_ground_rock_rough_1k.png"),
@@ -118,7 +123,7 @@ fn spawn_editor_assets(
     for entry in textures.iter() {
         let mesh = meshes.add(terrain::empty_mesh());
         let entity = commands
-            .spawn(PbrBundle {
+            .spawn(MaterialMeshBundle::<TerrainMaterial> {
                 mesh: mesh.clone(),
                 material: entry.material.clone(),
                 transform: Transform::default(),

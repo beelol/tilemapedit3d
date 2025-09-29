@@ -1,3 +1,4 @@
+use bevy::pbr::MaterialPlugin;
 use bevy::prelude::*;
 
 pub mod material;
@@ -7,6 +8,8 @@ pub struct TexturePlugin;
 
 impl Plugin for TexturePlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<registry::TerrainTextureRegistry>();
+        app.add_plugins(MaterialPlugin::<material::TerrainMaterial>::default())
+            .init_resource::<material::TerrainMaterialSettings>()
+            .init_resource::<registry::TerrainTextureRegistry>();
     }
 }

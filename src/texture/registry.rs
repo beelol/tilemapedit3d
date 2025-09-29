@@ -4,14 +4,14 @@ use bevy::prelude::*;
 
 use crate::types::TileType;
 
-use super::material::{self, TerrainMaterialHandles};
+use super::material::{self, TerrainMaterial, TerrainMaterialHandles, TerrainMaterialSettings};
 
 #[derive(Debug, Clone)]
 pub struct TerrainTextureEntry {
     pub tile_type: TileType,
     pub name: String,
     pub icon: Handle<Image>,
-    pub material: Handle<StandardMaterial>,
+    pub material: Handle<TerrainMaterial>,
 }
 
 #[derive(Resource, Default)]
@@ -36,12 +36,13 @@ impl TerrainTextureRegistry {
         tile_type: TileType,
         name: impl Into<String>,
         asset_server: &AssetServer,
-        materials: &mut Assets<StandardMaterial>,
+        materials: &mut Assets<TerrainMaterial>,
+        settings: &TerrainMaterialSettings,
         base_color: &str,
         normal: Option<&str>,
         roughness: Option<&str>,
         specular: Option<&str>,
-    ) -> Handle<StandardMaterial> {
+    ) -> Handle<TerrainMaterial> {
         let TerrainMaterialHandles {
             material,
             base_color: icon,
@@ -49,6 +50,7 @@ impl TerrainTextureRegistry {
         } = material::load_terrain_material(
             asset_server,
             materials,
+            settings,
             base_color.to_string(),
             normal.map(|s| s.to_string()),
             roughness.map(|s| s.to_string()),
@@ -63,6 +65,18 @@ impl TerrainTextureRegistry {
         });
 
         material
+    }
+
+    pub fn update_tiles_per_texture(
+        &self,
+        materials: &mut Assets<TerrainMaterial>,
+        tiles_per_texture: f32,
+    ) {
+        for entry in &self.entries {
+            if let Some(material) = materials.get_mut(&entry.material) {
+                material.extension.set_tiles_per_texture(tiles_per_texture);
+            }
+        }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &TerrainTextureEntry> {
