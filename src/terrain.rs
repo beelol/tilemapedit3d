@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::types::{RampDirection, TILE_HEIGHT, TILE_SIZE, TileKind, TileMap, TileType};
 use bevy::prelude::*;
-use bevy::render::mesh::Indices;
+use bevy::render::mesh::{Indices, VertexAttributeValues};
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::PrimitiveTopology;
 
@@ -59,6 +59,9 @@ pub fn empty_mesh() -> Mesh {
 
 #[derive(Resource, Clone, Copy)]
 pub struct TerrainUvSettings {
+    /// Number of tiles that should span a single full texture repeat. The value represents the
+    /// total tile count of the square patch (e.g. `4.0` means a 2×2 group of tiles will show one
+    /// full texture).
     pub tiles_per_texture: f32,
 }
 
@@ -66,6 +69,25 @@ impl Default for TerrainUvSettings {
     fn default() -> Self {
         Self {
             tiles_per_texture: 4.0,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct TerrainUvScale {
+    inv_horizontal: f32,
+    inv_vertical: f32,
+}
+
+impl TerrainUvScale {
+    fn from_settings(settings: &TerrainUvSettings) -> Self {
+        let tile_group = settings.tiles_per_texture.max(1.0).sqrt();
+        let horizontal_span = (tile_group * TILE_SIZE).max(f32::EPSILON);
+        let vertical_span = (tile_group * TILE_HEIGHT).max(f32::EPSILON);
+
+        Self {
+            inv_horizontal: 1.0 / horizontal_span,
+            inv_vertical: 1.0 / vertical_span,
         }
     }
 }
@@ -85,6 +107,7 @@ pub fn build_map_meshes(map: &TileMap, settings: &TerrainUvSettings) -> HashMap<
         }
     }
 
+    let uv_scale = TerrainUvScale::from_settings(settings);
     let mut buffers: HashMap<TileType, MeshBuffers> = HashMap::new();
 
     for y in 0..map.height {
@@ -99,7 +122,7 @@ pub fn build_map_meshes(map: &TileMap, settings: &TerrainUvSettings) -> HashMap<
 
             let buffer = buffers
                 .entry(tile.tile_type)
-                .or_insert_with(|| MeshBuffers::new(settings.tiles_per_texture));
+                .or_insert_with(|| MeshBuffers::new(uv_scale));
 
             let nw = Vec3::new(x0, corners[CORNER_NW], z0);
             let ne = Vec3::new(x1, corners[CORNER_NE], z0);
@@ -216,23 +239,23 @@ struct MeshBuffers {
     uvs: Vec<[f32; 2]>,
     indices: Vec<u32>,
     next_index: u32,
-    tiles_per_texture: f32,
+    uv_scale: TerrainUvScale,
 }
 
 impl MeshBuffers {
-    fn new(tiles_per_texture: f32) -> Self {
+    fn new(uv_scale: TerrainUvScale) -> Self {
         Self {
             positions: Vec::new(),
             normals: Vec::new(),
             uvs: Vec::new(),
             indices: Vec::new(),
             next_index: 0,
-            tiles_per_texture,
+            uv_scale,
         }
     }
 
     fn push_quad(&mut self, verts: [Vec3; 4], mapping: SurfaceUvMapping) {
-        let tex = mapping.compute_uvs(verts, self.tiles_per_texture);
+        let tex = mapping.compute_uvs(verts, self.uv_scale);
         push_quad(
             &mut self.positions,
             &mut self.normals,
@@ -263,7 +286,7 @@ impl MeshBuffers {
             bottom_a,
             bottom_b,
             direction,
-            self.tiles_per_texture,
+            self.uv_scale,
         );
     }
 
@@ -336,7 +359,7 @@ fn add_side_face(
     bottom_a: Vec3,
     bottom_b: Vec3,
     direction: RampDirection,
-    tiles_per_texture: f32,
+    uv_scale: TerrainUvScale,
 ) {
     const EPS: f32 = 1e-4;
     if (top_a.y - bottom_a.y).abs() < EPS && (top_b.y - bottom_b.y).abs() < EPS {
@@ -348,7 +371,7 @@ fn add_side_face(
         RampDirection::North | RampDirection::South => SurfaceUvMapping::XY,
         RampDirection::West | RampDirection::East => SurfaceUvMapping::ZY,
     };
-    let tex = mapping.compute_uvs(verts, tiles_per_texture);
+    let tex = mapping.compute_uvs(verts, uv_scale);
 
     push_quad(positions, normals, uvs, indices, next_index, verts, tex);
 }
@@ -361,20 +384,13 @@ enum SurfaceUvMapping {
 }
 
 impl SurfaceUvMapping {
-    fn compute_uvs(self, verts: [Vec3; 4], tiles_per_texture: f32) -> [[f32; 2]; 4] {
-        let scale = if tiles_per_texture <= f32::EPSILON {
-            1.0
-        } else {
-            tiles_per_texture
-        };
-
+    fn compute_uvs(self, verts: [Vec3; 4], scale: TerrainUvScale) -> [[f32; 2]; 4] {
         let map_vertex = |v: Vec3| -> [f32; 2] {
-            let raw = match self {
-                SurfaceUvMapping::XZ => Vec2::new(v.x, v.z),
-                SurfaceUvMapping::XY => Vec2::new(v.x, v.y),
-                SurfaceUvMapping::ZY => Vec2::new(v.z, v.y),
-            };
-            (raw / scale).to_array()
+            match self {
+                SurfaceUvMapping::XZ => [v.x * scale.inv_horizontal, v.z * scale.inv_horizontal],
+                SurfaceUvMapping::XY => [v.x * scale.inv_horizontal, v.y * scale.inv_vertical],
+                SurfaceUvMapping::ZY => [v.z * scale.inv_horizontal, v.y * scale.inv_vertical],
+            }
         };
 
         [
@@ -383,5 +399,64 @@ impl SurfaceUvMapping {
             map_vertex(verts[2]),
             map_vertex(verts[3]),
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn top_faces_cover_full_texture_every_four_tiles() {
+        let mut map = TileMap::new(2, 2);
+        for y in 0..map.height {
+            for x in 0..map.width {
+                let mut tile = map.get(x, y).to_owned();
+                tile.x = x;
+                tile.y = y;
+                map.set(x, y, tile);
+            }
+        }
+
+        let settings = TerrainUvSettings {
+            tiles_per_texture: 4.0,
+        };
+        let mesh = build_map_meshes(&map, &settings)
+            .remove(&TileType::Grass)
+            .expect("grass mesh");
+
+        let VertexAttributeValues::Float32x2(uvs) = mesh
+            .attribute(Mesh::ATTRIBUTE_UV_0)
+            .expect("uvs present")
+            .clone()
+        else {
+            panic!("unexpected uv format");
+        };
+
+        assert!(
+            uvs.len() >= 6,
+            "expected at least one quad worth of vertices"
+        );
+
+        let nw = Vec2::from_array(uvs[0]);
+        let sw = Vec2::from_array(uvs[1]);
+        let se = Vec2::from_array(uvs[2]);
+        let ne = Vec2::from_array(uvs[5]);
+
+        let expected = [
+            Vec2::new(0.0, 0.0),
+            Vec2::new(0.0, 0.5),
+            Vec2::new(0.5, 0.5),
+            Vec2::new(0.5, 0.0),
+        ];
+
+        let actual = [nw, sw, se, ne];
+
+        for (idx, (&actual, expected)) in actual.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                actual.distance(*expected) < 1e-6,
+                "uv[{idx}] {actual:?} != {expected:?}"
+            );
+        }
     }
 }
