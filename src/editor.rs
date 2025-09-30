@@ -49,6 +49,7 @@ pub struct EditorState {
     pub hover: Option<(u32, u32)>,
     pub map: TileMap,
     pub map_dirty: bool,
+    pub show_grid: bool,
 }
 impl Default for EditorState {
     fn default() -> Self {
@@ -60,6 +61,7 @@ impl Default for EditorState {
             hover: None,
             map: TileMap::new(64, 64),
             map_dirty: true,
+            show_grid: true,
         }
     }
 }

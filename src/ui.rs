@@ -75,6 +75,9 @@ fn ui_panel(
                     state.map_dirty = true;
                 }
             }
+
+            ui.separator();
+            ui.checkbox(&mut state.show_grid, "Gridlines");
         });
 
         if !palette_items.is_empty() {
