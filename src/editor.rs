@@ -105,16 +105,16 @@ fn spawn_editor_assets(
             "Rocky Terrain",
             "textures/terrain/rocky_terrain_02_diff_1k.png",
             Some("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
-            None,
-            None,
+            Some("textures/terrain/rocky_terrain_02_rough_1k_fixed_rgb.exr"),
+            Some("textures/terrain/rocky_terrain_02_disp_1k.png"),
         ),
         (
             TileType::Dirt,
             "Worn Soil",
             "textures/terrain/rocky_terrain_02_diff_1k.png",
             Some("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
-            None,
-            None,
+            Some("textures/terrain/rocky_terrain_02_rough_1k_fixed_rgb.exr"),
+            Some("textures/terrain/rocky_terrain_02_disp_1k.png"),
         ),
         (
             TileType::Cliff,
@@ -122,7 +122,7 @@ fn spawn_editor_assets(
             "textures/terrain/rock/aerial_ground_rock_diff_1k.png",
             Some("textures/terrain/rock/aerial_ground_rock_nor_gl_1k_fixed.exr"),
             Some("textures/terrain/rock/aerial_ground_rock_rough_1k.png"),
-            None,
+            Some("textures/terrain/rock/aerial_ground_rock_disp_1k.png"),
         ),
         (
             TileType::Rock,
@@ -130,11 +130,11 @@ fn spawn_editor_assets(
             "textures/terrain/rock/aerial_ground_rock_diff_1k.png",
             Some("textures/terrain/rock/aerial_ground_rock_nor_gl_1k_fixed.exr"),
             Some("textures/terrain/rock/aerial_ground_rock_rough_1k.png"),
-            None,
+            Some("textures/terrain/rock/aerial_ground_rock_disp_1k.png"),
         ),
     ];
 
-    for (tile_type, name, base, normal, roughness, specular) in texture_defs {
+    for (tile_type, name, base, normal, roughness, dispersion) in texture_defs {
         textures.load_and_register(
             tile_type,
             name,
@@ -143,7 +143,7 @@ fn spawn_editor_assets(
             base,
             normal,
             roughness,
-            specular,
+            dispersion,
         );
     }
 
