@@ -3,7 +3,7 @@ use crate::terrain::{self, TerrainMeshSet};
 use crate::texture::material::{self, TerrainMaterial};
 use crate::texture::registry::TerrainTextureRegistry;
 use crate::types::TileType;
-use bevy::asset::LoadState;
+use bevy::asset::{AssetId, LoadState};
 use bevy::pbr::MaterialMeshBundle;
 use bevy::prelude::*;
 
@@ -97,18 +97,32 @@ fn update_runtime_material(
     {
         let registry = textures.as_ref();
         for entry in registry.iter() {
-            match asset_server.get_load_state(entry.preview.id()) {
-                Some(LoadState::Loaded) => {}
-                Some(LoadState::Failed(_)) => {
-                    error!(
-                        tile_type = ?entry.tile_type,
-                        "Terrain preview texture failed to load"
-                    );
-                    encountered_failure = true;
-                }
-                _ => {
-                    waiting_for_textures = true;
-                }
+            waiting_for_textures |= check_handle_state(
+                &asset_server,
+                entry.preview.id(),
+                entry.tile_type,
+                &mut encountered_failure,
+                "Terrain preview texture failed to load",
+            );
+
+            if let Some(normal) = entry.normal.as_ref() {
+                waiting_for_textures |= check_handle_state(
+                    &asset_server,
+                    normal.id(),
+                    entry.tile_type,
+                    &mut encountered_failure,
+                    "Terrain normal map failed to load",
+                );
+            }
+
+            if let Some(roughness) = entry.roughness.as_ref() {
+                waiting_for_textures |= check_handle_state(
+                    &asset_server,
+                    roughness.id(),
+                    entry.tile_type,
+                    &mut encountered_failure,
+                    "Terrain roughness map failed to load",
+                );
             }
         }
     }
@@ -128,14 +142,16 @@ fn update_runtime_material(
         return;
     };
 
-    let Some(array_handle) = textures.ensure_texture_array(&mut images) else {
-        error!("Failed to assemble terrain texture array after previews loaded");
+    let Some((base_handle, normal_handle, roughness_handle)) =
+        textures.ensure_texture_arrays(&mut images)
+    else {
+        error!("Failed to assemble terrain texture arrays after previews loaded");
         *visibility = Visibility::Hidden;
         return;
     };
 
     let desired_layers = images
-        .get(&array_handle)
+        .get(&base_handle)
         .map(|image| image.texture_descriptor.size.depth_or_array_layers)
         .unwrap_or(0);
 
@@ -150,13 +166,65 @@ fn update_runtime_material(
 
     if material
         .extension
-        .texture_array
+        .base_color_array
         .as_ref()
-        .map(|handle| handle != &array_handle)
+        .map(|handle| handle != &base_handle)
         .unwrap_or(true)
     {
-        material.extension.texture_array = Some(array_handle.clone());
+        material.extension.base_color_array = Some(base_handle.clone());
+    }
+
+    match normal_handle {
+        Some(handle) => {
+            if material
+                .extension
+                .normal_array
+                .as_ref()
+                .map(|existing| existing != &handle)
+                .unwrap_or(true)
+            {
+                material.extension.normal_array = Some(handle.clone());
+            }
+        }
+        None => {
+            material.extension.normal_array = None;
+        }
+    }
+
+    match roughness_handle {
+        Some(handle) => {
+            if material
+                .extension
+                .roughness_array
+                .as_ref()
+                .map(|existing| existing != &handle)
+                .unwrap_or(true)
+            {
+                material.extension.roughness_array = Some(handle.clone());
+            }
+        }
+        None => {
+            material.extension.roughness_array = None;
+        }
     }
 
     *visibility = Visibility::Visible;
+}
+
+fn check_handle_state(
+    asset_server: &AssetServer,
+    id: AssetId<Image>,
+    tile_type: TileType,
+    encountered_failure: &mut bool,
+    message: &str,
+) -> bool {
+    match asset_server.get_load_state(id) {
+        Some(LoadState::Loaded) => false,
+        Some(LoadState::Failed(_)) => {
+            error!(tile_type = ?tile_type, message);
+            *encountered_failure = true;
+            false
+        }
+        _ => true,
+    }
 }

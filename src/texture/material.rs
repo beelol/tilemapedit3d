@@ -21,7 +21,7 @@ pub struct TerrainMaterialHandles {
     pub base_color: Handle<Image>,
     pub normal: Option<Handle<Image>>,
     pub roughness: Option<Handle<Image>>,
-    pub specular: Option<Handle<Image>>,
+    pub dispersion: Option<Handle<Image>>,
 }
 
 const TILE_REPEAT: f32 = 4.0;
@@ -54,14 +54,22 @@ pub struct TerrainMaterialExtension {
     pub params: TerrainMaterialParams,
     #[texture(101, dimension = "2d_array")]
     #[sampler(102)]
-    pub texture_array: Option<Handle<Image>>,
+    pub base_color_array: Option<Handle<Image>>,
+    #[texture(103, dimension = "2d_array")]
+    #[sampler(104)]
+    pub normal_array: Option<Handle<Image>>,
+    #[texture(105, dimension = "2d_array")]
+    #[sampler(106)]
+    pub roughness_array: Option<Handle<Image>>,
 }
 
 impl Default for TerrainMaterialExtension {
     fn default() -> Self {
         Self {
             params: TerrainMaterialParams::default(),
-            texture_array: None,
+            base_color_array: None,
+            normal_array: None,
+            roughness_array: None,
         }
     }
 }
@@ -92,7 +100,7 @@ impl MaterialExtension for TerrainMaterialExtension {
         if let Some(frag) = descriptor.fragment.as_mut() {
             frag.shader_defs.push("VERTEX_UVS_B".into());
             frag.shader_defs
-                .push("TERRAIN_MATERIAL_EXTENSION_TEXTURE_ARRAY".into());
+                .push("TERRAIN_MATERIAL_EXTENSION_BASE_COLOR_ARRAY".into());
         }
 
         Ok(())
@@ -107,18 +115,17 @@ pub fn load_terrain_material(
     base_color: String,
     normal: Option<String>,
     roughness: Option<String>,
-    specular: Option<String>,
+    dispersion: Option<String>,
 ) -> TerrainMaterialHandles {
     let base_color_handle: Handle<Image> = asset_server.load(base_color);
     let normal_handle: Option<Handle<Image>> = normal.map(|path| asset_server.load(path));
     let roughness_handle: Option<Handle<Image>> = roughness.map(|path| asset_server.load(path));
-    let specular_handle: Option<Handle<Image>> = specular.map(|path| asset_server.load(path));
+    let dispersion_handle: Option<Handle<Image>> = dispersion.map(|path| asset_server.load(path));
 
     let mut base_material = StandardMaterial {
         base_color_texture: Some(base_color_handle.clone()),
         normal_map_texture: normal_handle.clone(),
-        metallic_roughness_texture: specular_handle.clone(),
-        occlusion_texture: roughness_handle.clone(),
+        metallic_roughness_texture: roughness_handle.clone(),
         ..default()
     };
 
@@ -135,7 +142,7 @@ pub fn load_terrain_material(
         base_color: base_color_handle,
         normal: normal_handle,
         roughness: roughness_handle,
-        specular: specular_handle,
+        dispersion: dispersion_handle,
     }
 }
 
