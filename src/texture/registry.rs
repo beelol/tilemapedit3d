@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use bevy::render::render_resource::{RenderAssetUsages, TextureDimension, TextureFormat};
+use bevy::render::render_asset::RenderAssetUsages;
+use bevy::render::render_resource::{TextureDimension, TextureFormat};
 
 use crate::types::TileType;
 
@@ -161,6 +162,7 @@ fn ensure_optional_array<F>(
 where
     F: Fn(&TerrainTextureEntry) -> Option<&Handle<Image>>,
 {
+    // check cache
     if let Some(handle) = cache.clone() {
         if images.get(&handle).is_some() {
             return Some(handle);
@@ -168,6 +170,7 @@ where
         *cache = None;
     }
 
+    // early exit if no textures at all
     let mut has_texture = false;
     for tile_type in TileType::ALL {
         let entry_index = *lookup.get(&tile_type)?;
@@ -177,52 +180,59 @@ where
             break;
         }
     }
-
     if !has_texture {
         return None;
     }
 
+    // pick a template image for fallbacks
     let Some(template_image) = find_template_image(entries, lookup, images, &accessor) else {
         warn!("Skipping optional terrain texture array due to missing loaded source images");
         return None;
     };
+    // Clone the template image to avoid borrowing conflicts
+    let template_image_clone = template_image.clone();
 
-    let mut layers: Vec<&Image> = Vec::with_capacity(TileType::ALL.len());
-    let mut fallbacks: Vec<Image> = Vec::new();
-
+    // --- pass 1: resolve handles (may mutate images) ---
+    let mut handles: Vec<Handle<Image>> = Vec::with_capacity(TileType::ALL.len());
     for tile_type in TileType::ALL {
         let entry_index = *lookup.get(&tile_type)?;
         let entry = entries.get(entry_index)?;
-        if let Some(handle) = accessor(entry) {
-            if let Some(image) = images.get(handle) {
-                layers.push(image);
-                continue;
-            } else {
-                return None;
-            }
-        }
 
-        let Some(fallback) = create_fallback_image(template_image, fallback_color) else {
-            warn!("Skipping optional terrain texture array due to unsupported format");
-            return None;
-        };
-        fallbacks.push(fallback);
-        let last = fallbacks.last().unwrap();
-        layers.push(last);
+        if let Some(handle) = accessor(entry) {
+            // only record handle, check later
+            handles.push(handle.clone());
+        } else {
+            let Some(fallback) = create_fallback_image(&template_image_clone, fallback_color) else {
+                warn!("Skipping optional terrain texture array due to unsupported format");
+                return None;
+            };
+            let fb_handle = images.add(fallback);
+            handles.push(fb_handle);
+        }
     }
 
+    // --- pass 2: collect references immutably (no mutation here) ---
+    let mut layers: Vec<&Image> = Vec::with_capacity(handles.len());
+    for h in &handles {
+        let Some(img) = images.get(h) else {
+            return None;
+        };
+        layers.push(img);
+    }
+
+    // build the array image
     let array_image = material::create_texture_array_image(&layers)?;
     let handle = images.add(array_image);
     *cache = Some(handle.clone());
     Some(handle)
 }
 
-fn find_template_image<F>(
-    entries: &[TerrainTextureEntry],
+fn find_template_image<'a, F>(
+    entries: &'a [TerrainTextureEntry],
     lookup: &HashMap<TileType, usize>,
-    images: &Assets<Image>,
+    images: &'a bevy::prelude::Assets<bevy::prelude::Image>,
     accessor: &F,
-) -> Option<&Image>
+) -> Option<&'a Image>
 where
     F: Fn(&TerrainTextureEntry) -> Option<&Handle<Image>>,
 {

@@ -105,7 +105,7 @@ fn spawn_editor_assets(
             "Rocky Terrain",
             "textures/terrain/rocky_terrain_02_diff_1k.png",
             Some("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
-            Some("textures/terrain/rocky_terrain_02_rough_1k.exr"),
+            Some("textures/terrain/rocky_terrain_02_rough_1k_fixed_rgb.exr"),
             Some("textures/terrain/rocky_terrain_02_disp_1k.png"),
         ),
         (
@@ -113,7 +113,7 @@ fn spawn_editor_assets(
             "Worn Soil",
             "textures/terrain/rocky_terrain_02_diff_1k.png",
             Some("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
-            Some("textures/terrain/rocky_terrain_02_rough_1k.exr"),
+            Some("textures/terrain/rocky_terrain_02_rough_1k_fixed_rgb.exr"),
             Some("textures/terrain/rocky_terrain_02_disp_1k.png"),
         ),
         (
