@@ -10,7 +10,7 @@ use super::material::{self, TerrainMaterial, TerrainMaterialHandles};
 pub struct TerrainTextureEntry {
     pub tile_type: TileType,
     pub name: String,
-    pub icon: Handle<Image>,
+    pub preview: Handle<Image>,
     pub material: Handle<TerrainMaterial>,
 }
 
@@ -18,6 +18,7 @@ pub struct TerrainTextureEntry {
 pub struct TerrainTextureRegistry {
     entries: Vec<TerrainTextureEntry>,
     lookup: HashMap<TileType, usize>,
+    texture_array: Option<Handle<Image>>,
 }
 
 impl TerrainTextureRegistry {
@@ -29,6 +30,7 @@ impl TerrainTextureRegistry {
             self.lookup.insert(entry.tile_type, index);
             self.entries.push(entry);
         }
+        self.texture_array = None;
     }
 
     pub fn load_and_register(
@@ -44,7 +46,7 @@ impl TerrainTextureRegistry {
     ) -> Handle<TerrainMaterial> {
         let TerrainMaterialHandles {
             material,
-            base_color: icon,
+            base_color: preview,
             ..
         } = material::load_terrain_material(
             asset_server,
@@ -58,7 +60,7 @@ impl TerrainTextureRegistry {
         self.register_loaded(TerrainTextureEntry {
             tile_type,
             name: name.into(),
-            icon,
+            preview,
             material: material.clone(),
         });
 
@@ -73,5 +75,30 @@ impl TerrainTextureRegistry {
         self.lookup
             .get(&tile_type)
             .and_then(|index| self.entries.get(*index))
+    }
+
+    pub fn ensure_texture_array(&mut self, images: &mut Assets<Image>) -> Option<Handle<Image>> {
+        if let Some(handle) = self.texture_array.clone() {
+            if images.get(&handle).is_some() {
+                return Some(handle);
+            }
+            self.texture_array = None;
+        }
+
+        let mut layers: Vec<&Image> = Vec::with_capacity(TileType::ALL.len());
+        for tile_type in TileType::ALL {
+            let entry_index = *self.lookup.get(&tile_type)?;
+            let entry = self.entries.get(entry_index)?;
+            let image = images.get(&entry.preview)?;
+            layers.push(image);
+        }
+
+        let array_image = material::create_texture_array_image(&layers)?;
+
+
+
+        let handle = images.add(array_image);
+        self.texture_array = Some(handle.clone());
+        Some(handle)
     }
 }

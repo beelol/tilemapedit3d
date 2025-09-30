@@ -24,10 +24,19 @@
 
 struct TerrainMaterialExtension {
     uv_scale: f32,
+    layer_count: u32,
+    _padding: vec2<f32>,
 }
 
 @group(2) @binding(100)
 var<uniform> terrain_material_extension: TerrainMaterialExtension;
+
+#ifdef TERRAIN_MATERIAL_EXTENSION_TEXTURE_ARRAY
+@group(2) @binding(101)
+var terrain_texture_array: texture_2d_array<f32>;
+@group(2) @binding(102)
+var terrain_texture_sampler: sampler;
+#endif
 
 fn triplanar_sample(
     tex: texture_2d<f32>,
@@ -50,6 +59,35 @@ fn triplanar_sample(
 
     return x_tex * weights.x + y_tex * weights.y + z_tex * weights.z;
 }
+
+#ifdef TERRAIN_MATERIAL_EXTENSION_TEXTURE_ARRAY
+fn triplanar_sample_layer(
+    tex: texture_2d_array<f32>,
+    samp: sampler,
+    pos: vec3<f32>,
+    norm: vec3<f32>,
+    scale: f32,
+    layer: i32,
+) -> vec4<f32> {
+    let n = normalize(norm);
+    let weights = abs(n) / (abs(n.x) + abs(n.y) + abs(n.z));
+
+    let uv_x = fract(pos.yz * scale);
+    let uv_y = fract(pos.xz * scale);
+    let uv_z = fract(pos.xy * scale);
+
+//    let layer_f = f32(layer);
+//    let x_tex = textureSample(tex, samp, vec3<f32>(uv_x, layer_f));
+//    let y_tex = textureSample(tex, samp, vec3<f32>(uv_y, layer_f));
+//    let z_tex = textureSample(tex, samp, vec3<f32>(uv_z, layer_f));
+
+    let x_tex = textureSample(tex, samp, uv_x, layer);
+    let y_tex = textureSample(tex, samp, uv_y, layer);
+    let z_tex = textureSample(tex, samp, uv_z, layer);
+
+    return x_tex * weights.x + y_tex * weights.y + z_tex * weights.z;
+}
+#endif
 
 
 
@@ -76,34 +114,44 @@ fn fragment(
     var pbr_input = pbr_input_from_standard_material(in, is_front);
 
     // Choose projection by dominant world normal axis
-    let an = abs(pbr_input.N); // vec3<f32>
     let scale = terrain_material_extension.uv_scale;
-    var uv: vec2<f32>;
+    var base_color = vec4<f32>(pbr_input.material.base_color.rgb, 1.0);
 
-    if (an.y >= max(an.x, an.z)) {
-        // tops: project to XZ
-        uv = pbr_input.world_position.xz * scale;
-    } else if (an.x >= an.z) {
-        // ±X sides: project to YZ
-        uv = pbr_input.world_position.yz * scale;
-    } else {
-        // ±Z sides: project to XY
-        uv = pbr_input.world_position.xy * scale;
-    }
-
-    // Sample base color using world-space planar UVs
-    let world_base = triplanar_sample(
+#ifdef STANDARD_MATERIAL_BASE_COLOR_TEXTURE
+    base_color = triplanar_sample(
         pbr_bindings::base_color_texture,
         pbr_bindings::base_color_sampler,
         pbr_input.world_position.xyz,
         pbr_input.world_normal.xyz,
-        terrain_material_extension.uv_scale,
+        scale,
     );
-    pbr_input.material.base_color = alpha_discard(pbr_input.material, world_base);
+#endif
 
-//    // Alpha discard + lighting as before
-//    pbr_input.material.base_color = alpha_discard(pbr_input.material, pbr_input.material.base_color);
+#ifdef TERRAIN_MATERIAL_EXTENSION_TEXTURE_ARRAY
+    if (terrain_material_extension.layer_count > 0u) {
+        let max_layer = i32(terrain_material_extension.layer_count) - 1;
+#ifdef VERTEX_UVS_B
+        let layer_source = in.uv_b.x;
 
+
+#else
+        let layer_source = 0.0;
+#endif
+        let layer_value = clamp(i32(round(layer_source)), 0, max_layer);
+        var sampled = triplanar_sample_layer(
+            terrain_texture_array,
+            terrain_texture_sampler,
+            pbr_input.world_position.xyz,
+            pbr_input.world_normal.xyz,
+            scale,
+            layer_value,
+        );
+        sampled.a = 1.0;
+        base_color = sampled;
+    }
+#endif
+
+    pbr_input.material.base_color = alpha_discard(pbr_input.material, base_color);
 
 #ifdef PREPASS_PIPELINE
     let out = deferred_output(in, pbr_input);
@@ -116,6 +164,8 @@ fn fragment(
     }
 
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
+//    out.color = vec4<f32>(in.uv_b.x / 10.0, in.uv_b.y, 0.0, 1.0);
+
 #endif
 
     return out;
