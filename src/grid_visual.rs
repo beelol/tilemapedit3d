@@ -5,6 +5,10 @@ use crate::{editor::EditorState, types::TILE_SIZE};
 const GRID_COLOR: Color = Color::srgb(0.85, 0.85, 0.85);
 
 pub fn draw_grid(mut gizmos: Gizmos, state: Res<EditorState>) {
+    if !state.show_grid {
+        return;
+    }
+
     let radius_x = state.map.width as i32;
     let radius_z = state.map.height as i32;
 
