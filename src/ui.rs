@@ -85,6 +85,9 @@ fn ui_panel(
                     .spacing([6.0, 6.0])
                     .num_columns(COLUMNS);
 
+                let button_outer_size = egui::Vec2::splat(36.0);
+                let button_inner_size = egui::vec2(32.0, 32.0);
+
                 grid.show(ui, |grid_ui| {
                     for (index, item) in palette_items.iter().enumerate() {
                         let is_selected = state.current_texture == item.tile_type;
@@ -98,12 +101,13 @@ fn ui_panel(
                             .inner_margin(egui::Margin::same(2.0))
                             .stroke(stroke)
                             .show(grid_ui, |ui| {
-                                ui.set_min_size(egui::Vec2::splat(36.0));
+                                ui.set_min_size(button_outer_size);
+                                ui.set_max_size(button_outer_size);
                                 ui.centered_and_justified(|ui| {
                                     ui.add(
                                         egui::ImageButton::new(egui::load::SizedTexture {
                                             id: item.texture,
-                                            size: egui::vec2(32.0, 32.0),
+                                            size: button_inner_size,
                                         })
                                         .frame(false),
                                     )
