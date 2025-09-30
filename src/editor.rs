@@ -19,9 +19,17 @@ impl Plugin for EditorPlugin {
                     update_hover,
                     paint_tiles,
                     rotate_ramps,
-                    rebuild_terrain_mesh,
                     draw_hover_highlight,
-                ),
+                )
+                    .before(terrain::TerrainMeshSet::Rebuild),
+            )
+            .add_systems(
+                Update,
+                rebuild_terrain_mesh.in_set(terrain::TerrainMeshSet::Rebuild),
+            )
+            .add_systems(
+                Update,
+                mark_map_clean.in_set(terrain::TerrainMeshSet::Cleanup),
             );
     }
 }
@@ -71,7 +79,6 @@ impl Default for TerrainVisual {
 
 struct TerrainLayer {
     mesh: Handle<Mesh>,
-    _entity: Entity,
 }
 
 #[derive(Default, Reflect, GizmoConfigGroup)]
@@ -90,51 +97,71 @@ fn spawn_editor_assets(
     asset_server: Res<AssetServer>,
     mut textures: ResMut<TerrainTextureRegistry>,
 ) {
-    textures.load_and_register(
-        TileType::Grass,
-        "Rocky Terrain",
-        &asset_server,
-        &mut mats,
-        "textures/terrain/rocky_terrain_02_diff_1k.png",
-        Some("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
-        // Some("textures/terrain/rocky_terrain_02_rough_1k.exr"),
-        None,
-        // Some("textures/terrain/rocky_terrain_02_spec_1k.png"),
-        None,
-    );
+    let texture_defs = [
+        (
+            TileType::Grass,
+            "Rocky Terrain",
+            "textures/terrain/rocky_terrain_02_diff_1k.png",
+            Some("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
+            None,
+            None,
+        ),
+        (
+            TileType::Dirt,
+            "Worn Soil",
+            "textures/terrain/rocky_terrain_02_diff_1k.png",
+            Some("textures/terrain/rocky_terrain_02_nor_gl_1k_fixed.exr"),
+            None,
+            None,
+        ),
+        (
+            TileType::Cliff,
+            "Cliff Rock",
+            "textures/terrain/rock/aerial_ground_rock_diff_1k.png",
+            Some("textures/terrain/rock/aerial_ground_rock_nor_gl_1k_fixed.exr"),
+            Some("textures/terrain/rock/aerial_ground_rock_rough_1k.png"),
+            None,
+        ),
+        (
+            TileType::Rock,
+            "Ground Rock",
+            "textures/terrain/rock/aerial_ground_rock_diff_1k.png",
+            Some("textures/terrain/rock/aerial_ground_rock_nor_gl_1k_fixed.exr"),
+            Some("textures/terrain/rock/aerial_ground_rock_rough_1k.png"),
+            None,
+        ),
+    ];
 
-    textures.load_and_register(
-        TileType::Rock,
-        "Ground Rock",
-        &asset_server,
-        &mut mats,
-        "textures/terrain/rock/aerial_ground_rock_diff_1k.png",
-        Some("textures/terrain/rock/aerial_ground_rock_nor_gl_1k_fixed.exr"),
-        Some("textures/terrain/rock/aerial_ground_rock_rough_1k.png"),
-        // Some("textures/terrain/rocky_terrain_02_spec_1k.png"),
-        None,
-    );
+    for (tile_type, name, base, normal, roughness, specular) in texture_defs {
+        textures.load_and_register(
+            tile_type,
+            name,
+            &asset_server,
+            &mut mats,
+            base,
+            normal,
+            roughness,
+            specular,
+        );
+    }
 
     let mut visual = TerrainVisual::default();
 
     for entry in textures.iter() {
+        let tile_type = entry.tile_type;
         let mesh = meshes.add(terrain::empty_mesh());
-        let entity = commands
-            .spawn(MaterialMeshBundle {
+        commands.spawn((
+            MaterialMeshBundle {
                 mesh: mesh.clone(),
                 material: entry.material.clone(),
                 transform: Transform::default(),
+                visibility: Visibility::Hidden,
                 ..default()
-            })
-            .id();
-
-        visual.layers.insert(
-            entry.tile_type,
-            TerrainLayer {
-                mesh,
-                _entity: entity,
             },
-        );
+            Name::new(format!("EditorTerrain::{tile_type:?}")),
+        ));
+
+        visual.layers.insert(tile_type, TerrainLayer { mesh });
     }
 
     commands.insert_resource(visual);
@@ -215,7 +242,7 @@ fn paint_tiles(
             let current = state_ref.map.get(x, y);
             let target_ramp_direction = if kind == TileKind::Ramp {
                 let base = elevation as f32 * TILE_HEIGHT;
-                let mut candidates = ramp_targets(&state_ref.map, x, y, base);
+                let candidates = ramp_targets(&state_ref.map, x, y, base);
                 if let Some(existing) = current.ramp_direction {
                     if candidates.contains(&existing) {
                         Some(existing)
@@ -326,14 +353,13 @@ fn ramp_targets(map: &TileMap, x: u32, y: u32, base: f32) -> Vec<RampDirection> 
 }
 
 fn rebuild_terrain_mesh(
-    mut state: ResMut<EditorState>,
+    state: Res<EditorState>,
     mut meshes: ResMut<Assets<Mesh>>,
     visual: Res<TerrainVisual>,
 ) {
     if !state.map_dirty {
         return;
     }
-    state.map_dirty = false;
 
     let mesh_map = terrain::build_map_meshes(&state.map);
 
@@ -346,6 +372,12 @@ fn rebuild_terrain_mesh(
         if let Some(existing) = meshes.get_mut(&layer.mesh) {
             *existing = mesh;
         }
+    }
+}
+
+fn mark_map_clean(mut state: ResMut<EditorState>) {
+    if state.map_dirty {
+        state.map_dirty = false;
     }
 }
 

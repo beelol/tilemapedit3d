@@ -1,7 +1,5 @@
 use crate::types::TileMap;
 use bincode::{config, decode_from_slice, encode_to_vec};
-use serde::{Deserialize, Serialize};
-
 const KEY: u8 = 0xAA;
 
 fn obfuscate(data: &mut [u8]) {

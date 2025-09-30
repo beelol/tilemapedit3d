@@ -23,7 +23,7 @@ fn ui_panel(
         .map(|entry| PaletteItem {
             tile_type: entry.tile_type,
             name: entry.name.clone(),
-            texture: egui_ctx.add_image(entry.icon.clone_weak()),
+            texture: egui_ctx.add_image(entry.preview.clone_weak()),
         })
         .collect();
 
@@ -81,7 +81,7 @@ fn ui_panel(
             ui.separator();
             ui.collapsing("Textures", |ui| {
                 const COLUMNS: usize = 4;
-                let mut grid = egui::Grid::new("texture_palette_grid")
+                let grid = egui::Grid::new("texture_palette_grid")
                     .spacing([6.0, 6.0])
                     .num_columns(COLUMNS);
 
