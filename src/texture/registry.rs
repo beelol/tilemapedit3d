@@ -94,6 +94,9 @@ impl TerrainTextureRegistry {
         }
 
         let array_image = material::create_texture_array_image(&layers)?;
+
+
+
         let handle = images.add(array_image);
         self.texture_array = Some(handle.clone());
         Some(handle)

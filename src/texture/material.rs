@@ -1,11 +1,12 @@
 use bevy::asset::Asset;
 use bevy::math::Vec2;
-use bevy::pbr::{ExtendedMaterial, MaterialExtension, StandardMaterial};
+use bevy::pbr::{ExtendedMaterial, MaterialExtension, MaterialPipelineKey, StandardMaterial};
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{
-    AsBindGroup, Extent3d, ShaderRef, ShaderType, TextureDimension, TextureFormat, TextureUsages,
+    AsBindGroup, Extent3d, RenderPipelineDescriptor, ShaderRef, ShaderType,
+    SpecializedMeshPipelineError, TextureDimension, TextureFormat, TextureUsages,
     TextureViewDescriptor, TextureViewDimension,
 };
 use bevy::render::texture::Image;
@@ -72,6 +73,29 @@ impl MaterialExtension for TerrainMaterialExtension {
 
     fn deferred_fragment_shader() -> ShaderRef {
         "shaders/terrain_pbr_extension.wgsl".into()
+    }
+
+    fn specialize(
+        _pipeline: &bevy::pbr::MaterialExtensionPipeline,
+        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
+        _layout: &bevy::render::mesh::MeshVertexBufferLayoutRef,
+        _key: bevy::pbr::MaterialExtensionKey<Self>,
+    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
+        descriptor.vertex.shader_defs.push("VERTEX_UVS_B".into());
+        descriptor
+            .fragment
+            .as_mut()
+            .unwrap()
+            .shader_defs
+            .push("VERTEX_UVS_B".into());
+
+        if let Some(frag) = descriptor.fragment.as_mut() {
+            frag.shader_defs.push("VERTEX_UVS_B".into());
+            frag.shader_defs
+                .push("TERRAIN_MATERIAL_EXTENSION_TEXTURE_ARRAY".into());
+        }
+
+        Ok(())
     }
 }
 
@@ -142,7 +166,11 @@ pub fn create_texture_array_image(layers: &[&Image]) -> Option<Image> {
     let format = first.texture_descriptor.format;
     let layer_size = first.data.len();
 
+    dbg!(layer_size);
+
     if layer_size == 0 {
+        dbg!("layer size is fucking 0");
+
         return None;
     }
 

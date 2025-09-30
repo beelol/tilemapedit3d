@@ -99,7 +99,7 @@ fn update_runtime_material(
         for entry in registry.iter() {
             match asset_server.get_load_state(entry.preview.id()) {
                 Some(LoadState::Loaded) => {}
-                Some(LoadState::Failed) => {
+                Some(LoadState::Failed(_)) => {
                     error!(
                         tile_type = ?entry.tile_type,
                         "Terrain preview texture failed to load"

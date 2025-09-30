@@ -76,10 +76,14 @@ fn triplanar_sample_layer(
     let uv_y = fract(pos.xz * scale);
     let uv_z = fract(pos.xy * scale);
 
-    let layer_f = f32(layer);
-    let x_tex = textureSample(tex, samp, vec3<f32>(uv_x, layer_f));
-    let y_tex = textureSample(tex, samp, vec3<f32>(uv_y, layer_f));
-    let z_tex = textureSample(tex, samp, vec3<f32>(uv_z, layer_f));
+//    let layer_f = f32(layer);
+//    let x_tex = textureSample(tex, samp, vec3<f32>(uv_x, layer_f));
+//    let y_tex = textureSample(tex, samp, vec3<f32>(uv_y, layer_f));
+//    let z_tex = textureSample(tex, samp, vec3<f32>(uv_z, layer_f));
+
+    let x_tex = textureSample(tex, samp, uv_x, layer);
+    let y_tex = textureSample(tex, samp, uv_y, layer);
+    let z_tex = textureSample(tex, samp, uv_z, layer);
 
     return x_tex * weights.x + y_tex * weights.y + z_tex * weights.z;
 }
@@ -128,6 +132,8 @@ fn fragment(
         let max_layer = i32(terrain_material_extension.layer_count) - 1;
 #ifdef VERTEX_UVS_B
         let layer_source = in.uv_b.x;
+
+
 #else
         let layer_source = 0.0;
 #endif
@@ -158,6 +164,8 @@ fn fragment(
     }
 
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
+//    out.color = vec4<f32>(in.uv_b.x / 10.0, in.uv_b.y, 0.0, 1.0);
+
 #endif
 
     return out;
