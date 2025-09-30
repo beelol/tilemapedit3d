@@ -101,6 +101,11 @@ impl MaterialExtension for TerrainMaterialExtension {
             frag.shader_defs.push("VERTEX_UVS_B".into());
             frag.shader_defs
                 .push("TERRAIN_MATERIAL_EXTENSION_BASE_COLOR_ARRAY".into());
+
+            frag.shader_defs
+                .push("TERRAIN_MATERIAL_EXTENSION_NORMAL_ARRAY".into());
+
+            frag.shader_defs.push("DEBUG_NORMALS".into());
         }
 
         Ok(())
@@ -122,6 +127,9 @@ pub fn load_terrain_material(
     let roughness_handle: Option<Handle<Image>> = roughness.map(|path| asset_server.load(path));
     let dispersion_handle: Option<Handle<Image>> = dispersion.map(|path| asset_server.load(path));
 
+    info!("normal_handle:");
+    info!("{:?}", normal_handle);
+
     let mut base_material = StandardMaterial {
         base_color_texture: Some(base_color_handle.clone()),
         normal_map_texture: normal_handle.clone(),
@@ -129,8 +137,13 @@ pub fn load_terrain_material(
         ..default()
     };
 
-    base_material.perceptual_roughness = 1.0;
-    base_material.metallic = 0.0;
+    info!(
+        "Normal handle set? {:?}",
+        base_material.normal_map_texture.is_some()
+    );
+
+    // base_material.perceptual_roughness = 1.0;
+    // base_material.metallic = 0.0;
 
     let material_handle = materials.add(TerrainMaterial {
         base: base_material,

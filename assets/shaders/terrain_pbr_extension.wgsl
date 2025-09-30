@@ -123,9 +123,26 @@ fn triplanar_sample_layer_normal(
     let sample_y = textureSample(tex, samp, uv_y, layer).xyz * 2.0 - vec3<f32>(1.0);
     let sample_z = textureSample(tex, samp, uv_z, layer).xyz * 2.0 - vec3<f32>(1.0);
 
-    let sign_x = if n.x >= 0.0 { 1.0 } else { -1.0 };
-    let sign_y = if n.y >= 0.0 { 1.0 } else { -1.0 };
-    let sign_z = if n.z >= 0.0 { 1.0 } else { -1.0 };
+    var sign_x: f32;
+    if (n.x >= 0.0) {
+        sign_x = 1.0;
+    } else {
+        sign_x = -1.0;
+    }
+
+    var sign_y: f32;
+    if (n.y >= 0.0) {
+        sign_y = 1.0;
+    } else {
+        sign_y = -1.0;
+    }
+
+    var sign_z: f32;
+    if (n.z >= 0.0) {
+        sign_z = 1.0;
+    } else {
+        sign_z = -1.0;
+    }
 
     let world_x = normalize(
         sample_x.x * vec3<f32>(0.0, sign_x, 0.0)
@@ -255,6 +272,8 @@ fn fragment(
         pbr_input.N = world_normal;
         pbr_input.clearcoat_N = world_normal;
     }
+
+
 #endif
 
 #ifdef TERRAIN_MATERIAL_EXTENSION_ROUGHNESS_ARRAY
@@ -278,6 +297,7 @@ fn fragment(
     }
 #endif
 
+
 #ifdef PREPASS_PIPELINE
     let out = deferred_output(in, pbr_input);
 #else
@@ -289,6 +309,16 @@ fn fragment(
     }
 
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
+
+//    #ifdef DEBUG_NORMALS
+//        out.color = vec4<f32>(
+//            0.5 * (pbr_input.N.x + 1.0),
+//            0.5 * (pbr_input.N.y + 1.0),
+//            0.5 * (pbr_input.N.z + 1.0),
+//            1.0
+//        );
+//    #endif
+
 //    out.color = vec4<f32>(in.uv_b.x / 10.0, in.uv_b.y, 0.0, 1.0);
 
 #endif
