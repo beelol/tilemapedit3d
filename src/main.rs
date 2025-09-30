@@ -3,6 +3,7 @@ mod controls;
 mod editor;
 mod grid_visual;
 mod io;
+mod runtime;
 mod terrain;
 mod texture;
 mod types;
@@ -13,17 +14,23 @@ use bevy_egui::EguiPlugin;
 use camera::CameraPlugin;
 use controls::ControlsPlugin;
 use editor::EditorPlugin;
+use runtime::RuntimePlugin;
 use texture::TexturePlugin;
 use ui::UiPlugin;
 
 fn main() {
     App::new()
         .add_plugins((DefaultPlugins, EguiPlugin))
+        .configure_sets(
+            Update,
+            terrain::TerrainMeshSet::Rebuild.before(terrain::TerrainMeshSet::Cleanup),
+        )
         .add_plugins((
             TexturePlugin,
             CameraPlugin,
             ControlsPlugin,
             EditorPlugin,
+            RuntimePlugin,
             UiPlugin,
         ))
         .add_systems(Startup, setup_light)
