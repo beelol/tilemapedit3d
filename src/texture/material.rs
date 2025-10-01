@@ -1,4 +1,4 @@
-use bevy::asset::Asset;
+use bevy::asset::{Asset, AssetEvent, AssetId};
 use bevy::math::Vec2;
 use bevy::pbr::{ExtendedMaterial, MaterialExtension, MaterialPipelineKey, StandardMaterial};
 use bevy::prelude::*;
@@ -12,6 +12,8 @@ use bevy::render::render_resource::{
 use bevy::render::texture::Image;
 
 use crate::types::TILE_SIZE;
+
+use super::registry::TerrainTextureRegistry;
 
 pub type TerrainMaterial = ExtendedMaterial<StandardMaterial, TerrainMaterialExtension>;
 
@@ -118,29 +120,41 @@ impl MaterialExtension for TerrainMaterialExtension {
     }
 }
 
-// fn format_loaded_roughness_textures(
-//     mut events: EventReader<AssetEvent<Image>>,
-//     mut images: ResMut<Assets<Image>>,
-//     terrain_handles: Res<TerrainMaterialHandles>,
-// ) {
-//     for event in events.read() {
-//         if let AssetEvent::LoadedWithDependencies { id } = event {
-//             // For each terrain roughness handle, compare its .id()
-//             if let Some(rough_handle) = &terrain_handles.roughness {
-//                 if rough_handle.id() == *id {
-//                     if let Some(image) = images.get_mut(rough_handle) {
-//                         if image.texture_descriptor.format == TextureFormat::Rgba8UnormSrgb {
-//                             image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
-//                         }
-//                         // else if image.texture_descriptor.format == TextureFormat::R8UnormSrgb {
-//                         //     image.texture_descriptor.format = TextureFormat::R8Unorm;
-//                         // }
-//                     }
-//                 }
-//             }
-//         }
-//     }
-// }
+pub fn format_loaded_terrain_maps(
+    mut events: EventReader<AssetEvent<Image>>,
+    mut images: ResMut<Assets<Image>>,
+    textures: Res<TerrainTextureRegistry>,
+) {
+    // Collect the asset ids we care about once so we can reuse them for every event.
+    let mut tracked_ids: Vec<AssetId<Image>> = Vec::new();
+    for entry in textures.iter() {
+        if let Some(handle) = &entry.roughness {
+            tracked_ids.push(handle.id());
+        }
+        if let Some(handle) = &entry.dispersion {
+            tracked_ids.push(handle.id());
+        }
+    }
+
+    if tracked_ids.is_empty() {
+        return;
+    }
+
+    for event in events.read() {
+        let id = match event {
+            AssetEvent::LoadedWithDependencies { id } | AssetEvent::Modified { id } => *id,
+            _ => continue,
+        };
+
+        if !tracked_ids.iter().any(|tracked| *tracked == id) {
+            continue;
+        }
+
+        if let Some(image) = images.get_mut(id) {
+            ensure_image_uses_linear_format(image);
+        }
+    }
+}
 
 /// Load a terrain material and keep the individual texture handles around so they can be
 /// reused for things like UI previews.
@@ -213,7 +227,7 @@ pub fn create_texture_array_image(layers: &[&Image]) -> Option<Image> {
 
     let first = layers[0];
     let size = first.texture_descriptor.size;
-    let format = first.texture_descriptor.format;
+    let format = linear_texture_format(first.texture_descriptor.format);
     let layer_size = first.data.len();
 
     if layer_size == 0 {
@@ -222,7 +236,9 @@ pub fn create_texture_array_image(layers: &[&Image]) -> Option<Image> {
 
     let mut data = Vec::with_capacity(layer_size * layers.len());
     for image in layers {
-        if image.texture_descriptor.size != size || image.texture_descriptor.format != format {
+        if image.texture_descriptor.size != size
+            || linear_texture_format(image.texture_descriptor.format) != format
+        {
             return None;
         }
         data.extend_from_slice(&image.data);
@@ -247,4 +263,32 @@ pub fn create_texture_array_image(layers: &[&Image]) -> Option<Image> {
     });
 
     Some(array_image)
+}
+
+pub(crate) fn ensure_image_uses_linear_format(image: &mut Image) -> bool {
+    let current = image.texture_descriptor.format;
+    let linear = linear_texture_format(current);
+    if current == linear {
+        return false;
+    }
+
+    image.texture_descriptor.format = linear;
+
+    if let Some(view_descriptor) = image.texture_view_descriptor.as_mut() {
+        if let Some(view_format) = view_descriptor.format {
+            if view_format == current {
+                view_descriptor.format = Some(linear);
+            }
+        }
+    }
+
+    true
+}
+
+pub(crate) fn linear_texture_format(format: TextureFormat) -> TextureFormat {
+    match format {
+        TextureFormat::Rgba8UnormSrgb => TextureFormat::Rgba8Unorm,
+        TextureFormat::R8UnormSrgb => TextureFormat::R8Unorm,
+        other => other,
+    }
 }
