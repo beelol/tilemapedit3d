@@ -52,12 +52,15 @@ impl Default for TerrainMaterialParams {
 pub struct TerrainMaterialExtension {
     #[uniform(100)]
     pub params: TerrainMaterialParams,
+
     #[texture(101, dimension = "2d_array")]
     #[sampler(102)]
     pub base_color_array: Option<Handle<Image>>,
+
     #[texture(103, dimension = "2d_array")]
     #[sampler(104)]
     pub normal_array: Option<Handle<Image>>,
+
     #[texture(105, dimension = "2d_array")]
     #[sampler(106)]
     pub roughness_array: Option<Handle<Image>>,
@@ -105,12 +108,39 @@ impl MaterialExtension for TerrainMaterialExtension {
             frag.shader_defs
                 .push("TERRAIN_MATERIAL_EXTENSION_NORMAL_ARRAY".into());
 
-            frag.shader_defs.push("DEBUG_NORMALS".into());
+            frag.shader_defs
+                .push("TERRAIN_MATERIAL_EXTENSION_ROUGHNESS_ARRAY".into());
+
+            frag.shader_defs.push("DEBUG_ROUGHNESS".into());
         }
 
         Ok(())
     }
 }
+
+// fn format_loaded_roughness_textures(
+//     mut events: EventReader<AssetEvent<Image>>,
+//     mut images: ResMut<Assets<Image>>,
+//     terrain_handles: Res<TerrainMaterialHandles>,
+// ) {
+//     for event in events.read() {
+//         if let AssetEvent::LoadedWithDependencies { id } = event {
+//             // For each terrain roughness handle, compare its .id()
+//             if let Some(rough_handle) = &terrain_handles.roughness {
+//                 if rough_handle.id() == *id {
+//                     if let Some(image) = images.get_mut(rough_handle) {
+//                         if image.texture_descriptor.format == TextureFormat::Rgba8UnormSrgb {
+//                             image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
+//                         }
+//                         // else if image.texture_descriptor.format == TextureFormat::R8UnormSrgb {
+//                         //     image.texture_descriptor.format = TextureFormat::R8Unorm;
+//                         // }
+//                     }
+//                 }
+//             }
+//         }
+//     }
+// }
 
 /// Load a terrain material and keep the individual texture handles around so they can be
 /// reused for things like UI previews.
@@ -127,8 +157,8 @@ pub fn load_terrain_material(
     let roughness_handle: Option<Handle<Image>> = roughness.map(|path| asset_server.load(path));
     let dispersion_handle: Option<Handle<Image>> = dispersion.map(|path| asset_server.load(path));
 
-    info!("normal_handle:");
-    info!("{:?}", normal_handle);
+    info!("roughness_handle:");
+    info!("{:?}", roughness_handle);
 
     let mut base_material = StandardMaterial {
         base_color_texture: Some(base_color_handle.clone()),
@@ -138,12 +168,12 @@ pub fn load_terrain_material(
     };
 
     info!(
-        "Normal handle set? {:?}",
-        base_material.normal_map_texture.is_some()
+        "Roughness handle set? {:?}",
+        base_material.metallic_roughness_texture.is_some()
     );
 
-    // base_material.perceptual_roughness = 1.0;
-    // base_material.metallic = 0.0;
+    base_material.perceptual_roughness = 1.0;
+    base_material.metallic = 1.0;
 
     let material_handle = materials.add(TerrainMaterial {
         base: base_material,
@@ -186,11 +216,7 @@ pub fn create_texture_array_image(layers: &[&Image]) -> Option<Image> {
     let format = first.texture_descriptor.format;
     let layer_size = first.data.len();
 
-    dbg!(layer_size);
-
     if layer_size == 0 {
-        dbg!("layer size is fucking 0");
-
         return None;
     }
 

@@ -180,9 +180,9 @@ fn triplanar_sample_layer_scalar(
     let uv_y = fract(pos.xz * scale);
     let uv_z = fract(pos.xy * scale);
 
-    let sample_x = textureSample(tex, samp, uv_x, layer).r;
-    let sample_y = textureSample(tex, samp, uv_y, layer).r;
-    let sample_z = textureSample(tex, samp, uv_z, layer).r;
+    let sample_x = textureSample(tex, samp, uv_x, layer).g;
+    let sample_y = textureSample(tex, samp, uv_y, layer).g;
+    let sample_z = textureSample(tex, samp, uv_z, layer).g;
 
     return sample_x * weights.x + sample_y * weights.y + sample_z * weights.z;
 }
@@ -320,6 +320,29 @@ fn fragment(
 //    #endif
 
 //    out.color = vec4<f32>(in.uv_b.x / 10.0, in.uv_b.y, 0.0, 1.0);
+
+
+#ifdef DEBUG_ROUGHNESS
+    if (terrain_material_extension.layer_count > 0u) {
+            let max_layer = i32(terrain_material_extension.layer_count) - 1;
+            #ifdef VERTEX_UVS_B
+                let layer_source = in.uv_b.x;
+            #else
+                let layer_source = 0.0;
+            #endif
+            let layer_value = clamp(i32(round(layer_source)), 0, max_layer);
+
+            let tex = textureSample(
+                terrain_roughness_array,
+                terrain_roughness_sampler,
+                fract(in.uv_b.xy),
+                layer_value,
+            );
+
+            // Show channels separately
+            out.color = vec4<f32>(tex.g, tex.g, tex.g, 1.0);
+        }
+#endif
 
 #endif
 
