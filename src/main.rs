@@ -8,6 +8,7 @@ mod terrain;
 mod texture;
 mod types;
 mod ui;
+mod debug;
 
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
