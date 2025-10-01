@@ -332,15 +332,27 @@ fn fragment(
             #endif
             let layer_value = clamp(i32(round(layer_source)), 0, max_layer);
 
-            let tex = textureSample(
-                terrain_roughness_array,
-                terrain_roughness_sampler,
-                fract(in.uv_b.xy),
-                layer_value,
-            );
+
+
+let texVal = textureSample(
+    terrain_roughness_array,
+    terrain_roughness_sampler,
+    fract(in.uv_b.xy),
+    layer_value,
+);
+
+out.color = vec4<f32>(texVal.r, texVal.g, texVal.b, 1.0);
+
+//            let tex = textureSample(
+//                terrain_roughness_array,
+//                terrain_roughness_sampler,
+//                fract(in.uv_b.xy),
+//                layer_value,
+//            );
 
             // Show channels separately
-            out.color = vec4<f32>(tex.g, tex.g, tex.g, 1.0);
+//out.color = vec4<f32>(tex.g, tex.g, tex.g, 1.0);
+
         }
 #endif
 

@@ -252,3 +252,33 @@ pub fn create_texture_array_image(layers: &[&Image]) -> Option<Image> {
 
     Some(array_image)
 }
+
+    pub(crate) fn ensure_image_uses_linear_format(image: &mut Image) -> bool {
+    let current = image.texture_descriptor.format;
+    let linear = linear_texture_format(current);
+    if current == linear {
+        return false;
+    }
+
+    image.texture_descriptor.format = linear;
+
+    if let Some(view_descriptor) = image.texture_view_descriptor.as_mut() {
+        if let Some(view_format) = view_descriptor.format {
+            if view_format == current {
+                view_descriptor.format = Some(linear);
+            }
+        }
+    }
+
+    true
+}
+
+pub(crate) fn linear_texture_format(format: TextureFormat) -> TextureFormat {
+    match format {
+        TextureFormat::Rgba8UnormSrgb => TextureFormat::Rgba8Unorm,
+        other => other,
+    }
+    
+    // format
+}
+

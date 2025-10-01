@@ -202,7 +202,8 @@ where
             // only record handle, check later
             handles.push(handle.clone());
         } else {
-            let Some(fallback) = create_fallback_image(&template_image_clone, fallback_color) else {
+            let Some(fallback) = create_fallback_image(&template_image_clone, fallback_color)
+            else {
                 warn!("Skipping optional terrain texture array due to unsupported format");
                 return None;
             };
@@ -268,6 +269,12 @@ fn color_to_bytes(format: TextureFormat, color: [f32; 4]) -> Option<Vec<u8>> {
             let bytes: [u8; 4] = color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8);
             Some(bytes.to_vec())
         }
+
+        TextureFormat::R8Unorm => {
+            let byte = (color[0].clamp(0.0, 1.0) * 255.0).round() as u8;
+            Some(vec![byte])
+        }
+
         TextureFormat::Rgba32Float => {
             let mut data = Vec::with_capacity(16);
             for component in color {
