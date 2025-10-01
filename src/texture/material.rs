@@ -163,19 +163,13 @@ pub fn load_terrain_material(
     // let dispersion_handle: Option<Handle<Image>> = dispersion.map(|path| asset_server.load(path));
 
     let normal_handle: Option<Handle<Image>> = normal.map(|path| {
-        asset_server.load_with_settings(path, |settings: &mut ImageLoaderSettings| {
-            settings.is_srgb = false;
-        })
+        asset_server.load(path)
     });
     let roughness_handle: Option<Handle<Image>> = roughness.map(|path| {
-        asset_server.load_with_settings(path, |settings: &mut ImageLoaderSettings| {
-            settings.is_srgb = false;
-        })
+        asset_server.load(path)
     });
     let dispersion_handle: Option<Handle<Image>> = dispersion.map(|path| {
-        asset_server.load_with_settings(path, |settings: &mut ImageLoaderSettings| {
-            settings.is_srgb = false;
-        })
+        asset_server.load(path)
     });
 
     info!("roughness_handle:");
@@ -193,7 +187,6 @@ pub fn load_terrain_material(
         base_material.metallic_roughness_texture.is_some()
     );
 
-    // base_material.perceptual_roughness = 1.0;
     base_material.metallic = 0.0;
 
     let material_handle = materials.add(TerrainMaterial {
@@ -209,6 +202,34 @@ pub fn load_terrain_material(
         dispersion: dispersion_handle,
     }
 }
+
+pub fn fix_roughness_images_on_load(
+    mut events: EventReader<AssetEvent<Image>>,
+    mut images: ResMut<Assets<Image>>,
+    asset_server: Res<AssetServer>,
+) {
+    for event in events.read() {
+        if let AssetEvent::LoadedWithDependencies { id } = event {
+            if let Some(path) = asset_server.get_path(*id) {
+                if path.path().to_string_lossy().contains("roughness") {
+                    if let Some(image) = images.get_mut(*id) {
+                        match image.texture_descriptor.format {
+                            TextureFormat::Rgba8UnormSrgb => {
+                                image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
+
+                                info!("Roughness image format: {:?}", image.texture_descriptor.format);
+                                info!("First few bytes: {:?}", &image.data[..16]);
+
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 pub fn create_runtime_material(materials: &mut Assets<TerrainMaterial>) -> Handle<TerrainMaterial> {
     let base = StandardMaterial {

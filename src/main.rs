@@ -18,6 +18,7 @@ use editor::EditorPlugin;
 use runtime::RuntimePlugin;
 use texture::TexturePlugin;
 use ui::UiPlugin;
+use crate::texture::material;
 
 fn main() {
     App::new()
@@ -36,6 +37,9 @@ fn main() {
         ))
         .add_systems(Startup, setup_light)
         .add_systems(Update, grid_visual::draw_grid)
+        .add_systems(Update, material::fix_roughness_images_on_load)
+
+
         .run();
 }
 
