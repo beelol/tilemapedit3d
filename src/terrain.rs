@@ -107,7 +107,7 @@ fn populate_mesh_buffers(
             if let Some(combined_buffer) = combined.as_mut() {
                 let tile_layer = map.get(x, y).tile_type.as_index() as f32;
                 
-                dbg!(map.get(x, y).tile_type);
+                // dbg!(map.get(x, y).tile_type);
                 
                 append_tile_geometry(map, &corner_cache, x, y, combined_buffer, Some(tile_layer));
             }
