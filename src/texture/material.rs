@@ -9,7 +9,7 @@ use bevy::render::render_resource::{
     SpecializedMeshPipelineError, TextureDimension, TextureFormat, TextureUsages,
     TextureViewDescriptor, TextureViewDimension,
 };
-use bevy::render::texture::Image;
+use bevy::render::texture::{Image, ImageLoaderSettings};
 
 use crate::types::TILE_SIZE;
 
@@ -154,7 +154,11 @@ pub fn load_terrain_material(
 ) -> TerrainMaterialHandles {
     let base_color_handle: Handle<Image> = asset_server.load(base_color);
     let normal_handle: Option<Handle<Image>> = normal.map(|path| asset_server.load(path));
-    let roughness_handle: Option<Handle<Image>> = roughness.map(|path| asset_server.load(path));
+    let roughness_handle: Option<Handle<Image>> = roughness.map(|path| {
+        asset_server.load_with_settings::<Image, _>(path, |settings: &mut ImageLoaderSettings| {
+            settings.is_srgb = false; // force linear for roughness/metallic/AO
+        })
+    });
     let dispersion_handle: Option<Handle<Image>> = dispersion.map(|path| asset_server.load(path));
 
     info!("roughness_handle:");
@@ -172,8 +176,8 @@ pub fn load_terrain_material(
         base_material.metallic_roughness_texture.is_some()
     );
 
-    base_material.perceptual_roughness = 1.0;
-    base_material.metallic = 1.0;
+    // base_material.perceptual_roughness = 1.0;
+    base_material.metallic = 0.0;
 
     let material_handle = materials.add(TerrainMaterial {
         base: base_material,
