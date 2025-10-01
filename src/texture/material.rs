@@ -231,7 +231,7 @@ pub fn create_texture_array_image(layers: &[&Image]) -> Option<Image> {
 
     let first = layers[0];
     let size = first.texture_descriptor.size;
-    let format = linear_texture_format(first.texture_descriptor.format);
+    let format = first.texture_descriptor.format;
     let layer_size = first.data.len();
 
     if layer_size == 0 {
@@ -240,9 +240,7 @@ pub fn create_texture_array_image(layers: &[&Image]) -> Option<Image> {
 
     let mut data = Vec::with_capacity(layer_size * layers.len());
     for image in layers {
-        if image.texture_descriptor.size != size
-            || linear_texture_format(image.texture_descriptor.format) != format
-        {
+        if image.texture_descriptor.size != size || image.texture_descriptor.format != format {
             return None;
         }
         data.extend_from_slice(&image.data);
