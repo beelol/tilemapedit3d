@@ -153,13 +153,30 @@ pub fn load_terrain_material(
     dispersion: Option<String>,
 ) -> TerrainMaterialHandles {
     let base_color_handle: Handle<Image> = asset_server.load(base_color);
-    let normal_handle: Option<Handle<Image>> = normal.map(|path| asset_server.load(path));
-    let roughness_handle: Option<Handle<Image>> = roughness.map(|path| {
-        asset_server.load_with_settings::<Image, _>(path, |settings: &mut ImageLoaderSettings| {
-            settings.is_srgb = false; // force linear for roughness/metallic/AO
+
+    // let normal_handle: Option<Handle<Image>> = normal.map(|path| asset_server.load(path));
+    // let roughness_handle: Option<Handle<Image>> = roughness.map(|path| {
+    //     asset_server.load_with_settings::<Image, _>(path, |settings: &mut ImageLoaderSettings| {
+    //         settings.is_srgb = false; // force linear for roughness/metallic/AO
+    //     })
+    // });
+    // let dispersion_handle: Option<Handle<Image>> = dispersion.map(|path| asset_server.load(path));
+
+    let normal_handle: Option<Handle<Image>> = normal.map(|path| {
+        asset_server.load_with_settings(path, |settings: &mut ImageLoaderSettings| {
+            settings.is_srgb = false;
         })
     });
-    let dispersion_handle: Option<Handle<Image>> = dispersion.map(|path| asset_server.load(path));
+    let roughness_handle: Option<Handle<Image>> = roughness.map(|path| {
+        asset_server.load_with_settings(path, |settings: &mut ImageLoaderSettings| {
+            settings.is_srgb = false;
+        })
+    });
+    let dispersion_handle: Option<Handle<Image>> = dispersion.map(|path| {
+        asset_server.load_with_settings(path, |settings: &mut ImageLoaderSettings| {
+            settings.is_srgb = false;
+        })
+    });
 
     info!("roughness_handle:");
     info!("{:?}", roughness_handle);
@@ -253,7 +270,7 @@ pub fn create_texture_array_image(layers: &[&Image]) -> Option<Image> {
     Some(array_image)
 }
 
-    pub(crate) fn ensure_image_uses_linear_format(image: &mut Image) -> bool {
+pub(crate) fn ensure_image_uses_linear_format(image: &mut Image) -> bool {
     let current = image.texture_descriptor.format;
     let linear = linear_texture_format(current);
     if current == linear {
@@ -278,7 +295,6 @@ pub(crate) fn linear_texture_format(format: TextureFormat) -> TextureFormat {
         TextureFormat::Rgba8UnormSrgb => TextureFormat::Rgba8Unorm,
         other => other,
     }
-    
+
     // format
 }
-
