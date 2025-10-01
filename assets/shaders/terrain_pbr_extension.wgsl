@@ -362,7 +362,7 @@ if (terrain_material_extension.layer_count > 0u) {
             // Show channels separately
 //out.color = vec4<f32>(tex.g, tex.g, tex.g, 1.0);
 
-        }
+//        }
 //=======
     // sample via triplanar (same as the real path)
     let sampled = triplanar_sample_layer_scalar(
