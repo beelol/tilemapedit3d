@@ -213,9 +213,17 @@ where
     }
 
     // --- pass 2: collect references immutably (no mutation here) ---
+    for handle in &handles {
+        if let Some(image) = images.get_mut(handle) {
+            material::ensure_image_uses_linear_format(image);
+        } else {
+            return None;
+        }
+    }
+
     let mut layers: Vec<&Image> = Vec::with_capacity(handles.len());
-    for h in &handles {
-        let Some(img) = images.get(h) else {
+    for handle in &handles {
+        let Some(img) = images.get(handle) else {
             return None;
         };
         layers.push(img);
@@ -274,7 +282,16 @@ fn color_to_bytes(format: TextureFormat, color: [f32; 4]) -> Option<Vec<u8>> {
             let bytes: [u8; 4] = color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8);
             Some(bytes.to_vec())
         }
-        TextureFormat::R8Unorm | TextureFormat::R8UnormSrgb => {
+        TextureFormat::Bgra8Unorm | TextureFormat::Bgra8UnormSrgb => {
+            let bytes: [u8; 4] = [
+                (color[2].clamp(0.0, 1.0) * 255.0).round() as u8,
+                (color[1].clamp(0.0, 1.0) * 255.0).round() as u8,
+                (color[0].clamp(0.0, 1.0) * 255.0).round() as u8,
+                (color[3].clamp(0.0, 1.0) * 255.0).round() as u8,
+            ];
+            Some(bytes.to_vec())
+        }
+        TextureFormat::R8Unorm => {
             let byte = (color[0].clamp(0.0, 1.0) * 255.0).round() as u8;
             Some(vec![byte])
         }

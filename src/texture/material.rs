@@ -5,8 +5,7 @@ use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{
-    AsBindGroup, Extent3d, RenderPipelineDescriptor, ShaderRef, ShaderType,
-    SpecializedMeshPipelineError, TextureDimension, TextureFormat, TextureUsages,
+    AsBindGroup, Extent3d, ShaderRef, ShaderType, TextureDimension, TextureFormat, TextureUsages,
     TextureViewDescriptor, TextureViewDimension,
 };
 use bevy::render::texture::Image;
@@ -128,6 +127,9 @@ pub fn format_loaded_terrain_maps(
     // Collect the asset ids we care about once so we can reuse them for every event.
     let mut tracked_ids: Vec<AssetId<Image>> = Vec::new();
     for entry in textures.iter() {
+        if let Some(handle) = &entry.normal {
+            tracked_ids.push(handle.id());
+        }
         if let Some(handle) = &entry.roughness {
             tracked_ids.push(handle.id());
         }
@@ -142,7 +144,9 @@ pub fn format_loaded_terrain_maps(
 
     for event in events.read() {
         let id = match event {
-            AssetEvent::LoadedWithDependencies { id } | AssetEvent::Modified { id } => *id,
+            AssetEvent::Added { id }
+            | AssetEvent::LoadedWithDependencies { id }
+            | AssetEvent::Modified { id } => *id,
             _ => continue,
         };
 
@@ -288,7 +292,7 @@ pub(crate) fn ensure_image_uses_linear_format(image: &mut Image) -> bool {
 pub(crate) fn linear_texture_format(format: TextureFormat) -> TextureFormat {
     match format {
         TextureFormat::Rgba8UnormSrgb => TextureFormat::Rgba8Unorm,
-        TextureFormat::R8UnormSrgb => TextureFormat::R8Unorm,
+        TextureFormat::Bgra8UnormSrgb => TextureFormat::Bgra8Unorm,
         other => other,
     }
 }
