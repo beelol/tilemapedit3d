@@ -18,6 +18,7 @@ use editor::EditorPlugin;
 use runtime::RuntimePlugin;
 use texture::TexturePlugin;
 use ui::UiPlugin;
+use crate::debug::asset::image_inspector::ImageInspectorPlugin;
 use crate::texture::material;
 
 fn main() {
@@ -34,6 +35,7 @@ fn main() {
             EditorPlugin,
             RuntimePlugin,
             UiPlugin,
+            ImageInspectorPlugin
         ))
         .add_systems(Startup, setup_light)
         .add_systems(Update, grid_visual::draw_grid)

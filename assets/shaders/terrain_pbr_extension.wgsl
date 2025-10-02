@@ -329,6 +329,64 @@ fn fragment(
 
 //    out.color = vec4<f32>(in.uv_b.x / 10.0, in.uv_b.y, 0.0, 1.0);
 
+//debug boosted.
+//#ifdef DEBUG_ROUGHNESS
+//if (terrain_material_extension.layer_count > 0u) {
+//    let max_layer = i32(terrain_material_extension.layer_count) - 1;
+//    #ifdef VERTEX_UVS_B
+//    let layer_source = in.uv_b.x;
+//    #else
+//    let layer_source = 0.0;
+//    #endif
+//    let layer_value = clamp(i32(round(layer_source)), 0, max_layer);
+//
+////<<<<<<< HEAD
+//
+//
+////let texVal = textureSample(
+////    terrain_roughness_array,
+////    terrain_roughness_sampler,
+////    fract(in.uv_b.xy),
+////    layer_value,
+////);
+////
+////out.color = vec4<f32>(texVal.r, texVal.g, texVal.b, 1.0);
+//
+////            let tex = textureSample(
+////                terrain_roughness_array,
+////                terrain_roughness_sampler,
+////                fract(in.uv_b.xy),
+////                layer_value,
+////            );
+//
+//            // Show channels separately
+////out.color = vec4<f32>(tex.g, tex.g, tex.g, 1.0);
+//
+////        }
+////=======
+//    // sample via triplanar (same as the real path)
+//    let sampled = triplanar_sample_layer_scalar(
+//        terrain_roughness_array,
+//        terrain_roughness_sampler,
+//        pbr_input.world_position.xyz,
+//        pbr_input.world_normal.xyz,
+//        terrain_material_extension.uv_scale,
+//        layer_value,
+//    );
+//
+//    // make variation visible
+//    let boosted = clamp((sampled - 0.05) * 6.0, 0.0, 1.0);
+//    out.color = vec4<f32>(boosted, boosted, boosted, 1.0);
+////    return out; // avoid being overwritten by lighting
+//}
+////>>>>>>> e74c3be (Finally get the image to show)
+//#endif
+
+
+
+
+
+
 
 #ifdef DEBUG_ROUGHNESS
 if (terrain_material_extension.layer_count > 0u) {
@@ -340,31 +398,7 @@ if (terrain_material_extension.layer_count > 0u) {
     #endif
     let layer_value = clamp(i32(round(layer_source)), 0, max_layer);
 
-//<<<<<<< HEAD
-
-
-//let texVal = textureSample(
-//    terrain_roughness_array,
-//    terrain_roughness_sampler,
-//    fract(in.uv_b.xy),
-//    layer_value,
-//);
-//
-//out.color = vec4<f32>(texVal.r, texVal.g, texVal.b, 1.0);
-
-//            let tex = textureSample(
-//                terrain_roughness_array,
-//                terrain_roughness_sampler,
-//                fract(in.uv_b.xy),
-//                layer_value,
-//            );
-
-            // Show channels separately
-//out.color = vec4<f32>(tex.g, tex.g, tex.g, 1.0);
-
-//        }
-//=======
-    // sample via triplanar (same as the real path)
+    // sample via triplanar (same path as shading)
     let sampled = triplanar_sample_layer_scalar(
         terrain_roughness_array,
         terrain_roughness_sampler,
@@ -374,15 +408,10 @@ if (terrain_material_extension.layer_count > 0u) {
         layer_value,
     );
 
-    // make variation visible
-    let boosted = clamp((sampled - 0.05) * 6.0, 0.0, 1.0);
-    out.color = vec4<f32>(boosted, boosted, boosted, 1.0);
-//    return out; // avoid being overwritten by lighting
+    // show EXACT value Bevy reads: 0..1
+    out.color = vec4<f32>(sampled, sampled, sampled, 1.0);
 }
-//>>>>>>> e74c3be (Finally get the image to show)
 #endif
-
-
 
 
 #endif'

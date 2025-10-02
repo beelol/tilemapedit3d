@@ -208,6 +208,44 @@ pub fn fix_roughness_images_on_load(
     mut images: ResMut<Assets<Image>>,
     asset_server: Res<AssetServer>,
 ) {
+    for (handle, image) in images.iter_mut() {
+        // only touch roughness maps
+        if let Some(path) = asset_server.get_path(handle) {
+            if !path.path().to_string_lossy().contains("roughness") {
+                continue;
+            }
+        }
+
+        // if it's already fine, skip
+        match image.texture_descriptor.format {
+            TextureFormat::R8Unorm | TextureFormat::R32Float => continue,
+            _ => {
+
+                // Coerce if it's an RGBA EXR or something else heavy
+                if image.texture_descriptor.format == TextureFormat::Rgba32Float {
+
+                    if let Some(path) = asset_server.get_path(handle) {
+                        info!("Inspecting roughness map @: {}", path.path().display());
+                    }
+                    info!("Found a roughness map with type TextureFormat::Rgba32Float");
+
+
+                    // Downcast: grab red channel as f32 and rebuild buffer
+                    let new_data: Vec<f32> = image
+                        .data
+                        .chunks_exact(16) // RGBA32F = 4 * f32 = 16 bytes
+                        .map(|px| f32::from_le_bytes([px[0], px[1], px[2], px[3]])) // take red
+                        .collect();
+
+                    image.data = bytemuck::cast_slice(&new_data).to_vec();
+                    image.texture_descriptor.format = TextureFormat::R32Float;
+                    image.texture_descriptor.size.depth_or_array_layers = 1;
+                    info!("Coerced roughness map {:?} to R32Float", handle);
+                }
+            }
+        }
+    }
+
     for event in events.read() {
         if let AssetEvent::LoadedWithDependencies { id } = event {
             if let Some(path) = asset_server.get_path(*id) {
