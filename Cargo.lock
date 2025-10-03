@@ -1772,6 +1772,7 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "bincode",
+ "bytemuck",
  "serde",
  "serde_json",
 ]

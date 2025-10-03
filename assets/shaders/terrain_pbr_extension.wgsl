@@ -180,9 +180,9 @@ fn triplanar_sample_layer_scalar(
     let uv_y = fract(pos.xz * scale);
     let uv_z = fract(pos.xy * scale);
 
-    let sample_x = textureSample(tex, samp, uv_x, layer).r;
-    let sample_y = textureSample(tex, samp, uv_y, layer).r;
-    let sample_z = textureSample(tex, samp, uv_z, layer).r;
+    let sample_x = textureSample(tex, samp, uv_x, layer).g;
+    let sample_y = textureSample(tex, samp, uv_y, layer).g;
+    let sample_z = textureSample(tex, samp, uv_z, layer).g;
 
     return sample_x * weights.x + sample_y * weights.y + sample_z * weights.z;
 }
@@ -279,11 +279,11 @@ fn fragment(
 #ifdef TERRAIN_MATERIAL_EXTENSION_ROUGHNESS_ARRAY
     if (terrain_material_extension.layer_count > 0u) {
         let max_layer = i32(terrain_material_extension.layer_count) - 1;
-#ifdef VERTEX_UVS_B
-        let layer_source = in.uv_b.x;
-#else
-        let layer_source = 0.0;
-#endif
+        #ifdef VERTEX_UVS_B
+            let layer_source = in.uv_b.x;
+        #else
+            let layer_source = 0.0;
+        #endif
         let layer_value = clamp(i32(round(layer_source)), 0, max_layer);
         let sampled = triplanar_sample_layer_scalar(
             terrain_roughness_array,
@@ -293,9 +293,22 @@ fn fragment(
             scale,
             layer_value,
         );
-        pbr_input.material.perceptual_roughness = clamp(sampled, 0.045, 1.0);
+
+        // Remap sampled 0..1 → custom min..max range
+        let rough_min: f32 = 0.2;   // tweak this
+        let rough_max: f32 = 0.9;   // tweak this
+
+        let rough = clamp(sampled, 0.0, 1.0);
+        let remapped = mix(rough_min, rough_max, rough);
+
+
+        pbr_input.material.perceptual_roughness = clamp(remapped, 0.045, 1.0);
+//        pbr_input.material.perceptual_roughness = sampled;
+//        pbr_input.material.metallic = 1.0;
+//        pbr_input.material.perceptual_roughness = 0.0;
     }
 #endif
+
 
 
 #ifdef PREPASS_PIPELINE
@@ -310,18 +323,45 @@ fn fragment(
 
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
 
-//    #ifdef DEBUG_NORMALS
-//        out.color = vec4<f32>(
-//            0.5 * (pbr_input.N.x + 1.0),
-//            0.5 * (pbr_input.N.y + 1.0),
-//            0.5 * (pbr_input.N.z + 1.0),
-//            1.0
-//        );
-//    #endif
+#ifdef DEBUG_NORMALS
+    out.color = vec4<f32>(
+        0.5 * (pbr_input.N.x + 1.0),
+        0.5 * (pbr_input.N.y + 1.0),
+        0.5 * (pbr_input.N.z + 1.0),
+        1.0
+    );
+#endif
 
 //    out.color = vec4<f32>(in.uv_b.x / 10.0, in.uv_b.y, 0.0, 1.0);
 
+
+#ifdef DEBUG_ROUGHNESS
+if (terrain_material_extension.layer_count > 0u) {
+    let max_layer = i32(terrain_material_extension.layer_count) - 1;
+    #ifdef VERTEX_UVS_B
+    let layer_source = in.uv_b.x;
+    #else
+    let layer_source = 0.0;
+    #endif
+    let layer_value = clamp(i32(round(layer_source)), 0, max_layer);
+
+    // sample via triplanar (same path as shading)
+    let sampled = triplanar_sample_layer_scalar(
+        terrain_roughness_array,
+        terrain_roughness_sampler,
+        pbr_input.world_position.xyz,
+        pbr_input.world_normal.xyz,
+        terrain_material_extension.uv_scale,
+        layer_value,
+    );
+
+    // show EXACT value Bevy reads: 0..1
+    out.color = vec4<f32>(sampled, sampled, sampled, 1.0);
+}
 #endif
+
+
+#endif'
 
     return out;
 }

@@ -9,7 +9,7 @@ use bevy::render::render_resource::{
     SpecializedMeshPipelineError, TextureDimension, TextureFormat, TextureUsages,
     TextureViewDescriptor, TextureViewDimension,
 };
-use bevy::render::texture::Image;
+use bevy::render::texture::{Image, ImageLoaderSettings};
 
 use crate::types::TILE_SIZE;
 
@@ -52,12 +52,15 @@ impl Default for TerrainMaterialParams {
 pub struct TerrainMaterialExtension {
     #[uniform(100)]
     pub params: TerrainMaterialParams,
+
     #[texture(101, dimension = "2d_array")]
     #[sampler(102)]
     pub base_color_array: Option<Handle<Image>>,
+
     #[texture(103, dimension = "2d_array")]
     #[sampler(104)]
     pub normal_array: Option<Handle<Image>>,
+
     #[texture(105, dimension = "2d_array")]
     #[sampler(106)]
     pub roughness_array: Option<Handle<Image>>,
@@ -105,12 +108,40 @@ impl MaterialExtension for TerrainMaterialExtension {
             frag.shader_defs
                 .push("TERRAIN_MATERIAL_EXTENSION_NORMAL_ARRAY".into());
 
-            frag.shader_defs.push("DEBUG_NORMALS".into());
+            frag.shader_defs
+                .push("TERRAIN_MATERIAL_EXTENSION_ROUGHNESS_ARRAY".into());
+
+            // frag.shader_defs.push("DEBUG_ROUGHNESS".into());
+            // frag.shader_defs.push("DEBUG_NORMALS".into());
         }
 
         Ok(())
     }
 }
+
+// fn format_loaded_roughness_textures(
+//     mut events: EventReader<AssetEvent<Image>>,
+//     mut images: ResMut<Assets<Image>>,
+//     terrain_handles: Res<TerrainMaterialHandles>,
+// ) {
+//     for event in events.read() {
+//         if let AssetEvent::LoadedWithDependencies { id } = event {
+//             // For each terrain roughness handle, compare its .id()
+//             if let Some(rough_handle) = &terrain_handles.roughness {
+//                 if rough_handle.id() == *id {
+//                     if let Some(image) = images.get_mut(rough_handle) {
+//                         if image.texture_descriptor.format == TextureFormat::Rgba8UnormSrgb {
+//                             image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
+//                         }
+//                         // else if image.texture_descriptor.format == TextureFormat::R8UnormSrgb {
+//                         //     image.texture_descriptor.format = TextureFormat::R8Unorm;
+//                         // }
+//                     }
+//                 }
+//             }
+//         }
+//     }
+// }
 
 /// Load a terrain material and keep the individual texture handles around so they can be
 /// reused for things like UI previews.
@@ -123,12 +154,27 @@ pub fn load_terrain_material(
     dispersion: Option<String>,
 ) -> TerrainMaterialHandles {
     let base_color_handle: Handle<Image> = asset_server.load(base_color);
-    let normal_handle: Option<Handle<Image>> = normal.map(|path| asset_server.load(path));
-    let roughness_handle: Option<Handle<Image>> = roughness.map(|path| asset_server.load(path));
-    let dispersion_handle: Option<Handle<Image>> = dispersion.map(|path| asset_server.load(path));
 
-    info!("normal_handle:");
-    info!("{:?}", normal_handle);
+    // let normal_handle: Option<Handle<Image>> = normal.map(|path| asset_server.load(path));
+    // let roughness_handle: Option<Handle<Image>> = roughness.map(|path| {
+    //     asset_server.load_with_settings::<Image, _>(path, |settings: &mut ImageLoaderSettings| {
+    //         settings.is_srgb = false; // force linear for roughness/metallic/AO
+    //     })
+    // });
+    // let dispersion_handle: Option<Handle<Image>> = dispersion.map(|path| asset_server.load(path));
+
+    let normal_handle: Option<Handle<Image>> = normal.map(|path| {
+        asset_server.load(path)
+    });
+    let roughness_handle: Option<Handle<Image>> = roughness.map(|path| {
+        asset_server.load(path)
+    });
+    let dispersion_handle: Option<Handle<Image>> = dispersion.map(|path| {
+        asset_server.load(path)
+    });
+
+    info!("roughness_handle:");
+    info!("{:?}", roughness_handle);
 
     let mut base_material = StandardMaterial {
         base_color_texture: Some(base_color_handle.clone()),
@@ -138,12 +184,11 @@ pub fn load_terrain_material(
     };
 
     info!(
-        "Normal handle set? {:?}",
-        base_material.normal_map_texture.is_some()
+        "Roughness handle set? {:?}",
+        base_material.metallic_roughness_texture.is_some()
     );
 
-    // base_material.perceptual_roughness = 1.0;
-    // base_material.metallic = 0.0;
+    base_material.metallic = 0.0;
 
     let material_handle = materials.add(TerrainMaterial {
         base: base_material,
@@ -158,6 +203,72 @@ pub fn load_terrain_material(
         dispersion: dispersion_handle,
     }
 }
+
+pub fn fix_roughness_images_on_load(
+    mut events: EventReader<AssetEvent<Image>>,
+    mut images: ResMut<Assets<Image>>,
+    asset_server: Res<AssetServer>,
+) {
+    for (handle, image) in images.iter_mut() {
+        // only touch roughness maps
+        if let Some(path) = asset_server.get_path(handle) {
+            if !path.path().to_string_lossy().contains("roughness") {
+                continue;
+            }
+        }
+
+        // if it's already fine, skip
+        match image.texture_descriptor.format {
+            TextureFormat::R8Unorm | TextureFormat::R32Float => continue,
+            _ => {
+
+                // Coerce if it's an RGBA EXR or something else heavy
+                if image.texture_descriptor.format == TextureFormat::Rgba32Float {
+
+                    if let Some(path) = asset_server.get_path(handle) {
+                        info!("Inspecting roughness map @: {}", path.path().display());
+                    }
+                    info!("Found a roughness map with type TextureFormat::Rgba32Float");
+
+
+                    // Downcast: grab red channel as f32 and rebuild buffer
+                    let new_data: Vec<f32> = image
+                        .data
+                        .chunks_exact(16) // RGBA32F = 4 * f32 = 16 bytes
+                        .map(|px| f32::from_le_bytes([px[0], px[1], px[2], px[3]])) // take red
+                        .collect();
+
+                    image.data = bytemuck::cast_slice(&new_data).to_vec();
+                    image.texture_descriptor.format = TextureFormat::R32Float;
+                    image.texture_descriptor.size.depth_or_array_layers = 1;
+                    info!("Coerced roughness map {:?} to R32Float", handle);
+                }
+            }
+        }
+    }
+
+    for event in events.read() {
+        if let AssetEvent::LoadedWithDependencies { id } = event {
+            if let Some(path) = asset_server.get_path(*id) {
+                if path.path().to_string_lossy().contains("roughness") {
+                    if let Some(image) = images.get_mut(*id) {
+                        match image.texture_descriptor.format {
+                            TextureFormat::Rgba8UnormSrgb => {
+                                image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
+
+                                info!("Roughness image format: {:?}", image.texture_descriptor.format);
+                                info!("First few bytes: {:?}", &image.data[..16]);
+
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 pub fn create_runtime_material(materials: &mut Assets<TerrainMaterial>) -> Handle<TerrainMaterial> {
     let base = StandardMaterial {
@@ -186,11 +297,7 @@ pub fn create_texture_array_image(layers: &[&Image]) -> Option<Image> {
     let format = first.texture_descriptor.format;
     let layer_size = first.data.len();
 
-    dbg!(layer_size);
-
     if layer_size == 0 {
-        dbg!("layer size is fucking 0");
-
         return None;
     }
 
@@ -221,4 +328,33 @@ pub fn create_texture_array_image(layers: &[&Image]) -> Option<Image> {
     });
 
     Some(array_image)
+}
+
+pub(crate) fn ensure_image_uses_linear_format(image: &mut Image) -> bool {
+    let current = image.texture_descriptor.format;
+    let linear = linear_texture_format(current);
+    if current == linear {
+        return false;
+    }
+
+    image.texture_descriptor.format = linear;
+
+    if let Some(view_descriptor) = image.texture_view_descriptor.as_mut() {
+        if let Some(view_format) = view_descriptor.format {
+            if view_format == current {
+                view_descriptor.format = Some(linear);
+            }
+        }
+    }
+
+    true
+}
+
+pub(crate) fn linear_texture_format(format: TextureFormat) -> TextureFormat {
+    match format {
+        TextureFormat::Rgba8UnormSrgb => TextureFormat::Rgba8Unorm,
+        other => other,
+    }
+
+    // format
 }
