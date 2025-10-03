@@ -39,7 +39,7 @@ fn main() {
         ))
         .add_systems(Startup, setup_light)
         .add_systems(Update, grid_visual::draw_grid)
-        .add_systems(Update, material::fix_roughness_images_on_load)
+        // .add_systems(Update, material::fix_roughness_images_on_load)
 
 
         .run();

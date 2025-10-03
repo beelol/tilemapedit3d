@@ -111,7 +111,8 @@ impl MaterialExtension for TerrainMaterialExtension {
             frag.shader_defs
                 .push("TERRAIN_MATERIAL_EXTENSION_ROUGHNESS_ARRAY".into());
 
-            frag.shader_defs.push("DEBUG_ROUGHNESS".into());
+            // frag.shader_defs.push("DEBUG_ROUGHNESS".into());
+            // frag.shader_defs.push("DEBUG_NORMALS".into());
         }
 
         Ok(())
