@@ -5,7 +5,11 @@ use bevy::ecs::schedule::SystemSet;
 use bevy::prelude::*;
 use bevy::render::mesh::Indices;
 use bevy::render::render_asset::RenderAssetUsages;
-use bevy::render::render_resource::PrimitiveTopology;
+use bevy::render::render_resource::{
+    AddressMode, FilterMode, PrimitiveTopology, SamplerDescriptor, TextureDimension, TextureFormat,
+    TextureUsages,
+};
+use bevy::render::texture::{Image, ImageSampler};
 
 pub const CORNER_NW: usize = 0;
 pub const CORNER_NE: usize = 1;
@@ -106,9 +110,9 @@ fn populate_mesh_buffers(
 
             if let Some(combined_buffer) = combined.as_mut() {
                 let tile_layer = map.get(x, y).tile_type.as_index() as f32;
-                
+
                 // dbg!(map.get(x, y).tile_type);
-                
+
                 append_tile_geometry(map, &corner_cache, x, y, combined_buffer, Some(tile_layer));
             }
         }
@@ -135,7 +139,11 @@ fn append_tile_geometry(
     let sw = Vec3::new(x0, corners[CORNER_SW], z1);
     let se = Vec3::new(x1, corners[CORNER_SE], z1);
 
-    buffer.push_quad([nw, sw, se, ne], [[0.0, 0.0]; 4], tile_layer);
+    let top_height = corners
+        .into_iter()
+        .fold(f32::NEG_INFINITY, |acc, value| acc.max(value));
+
+    buffer.push_quad([nw, sw, se, ne], [[0.0, 0.0]; 4], tile_layer, top_height);
 
     let (bnw, bne) = if y > 0 {
         let neighbor = corner_cache[map.idx(x, y - 1)];
@@ -150,6 +158,7 @@ fn append_tile_geometry(
         Vec3::new(x1, bne.min(ne.y), z0),
         RampDirection::North,
         tile_layer,
+        nw.y.max(ne.y),
     );
 
     let (bsw, bse) = if y + 1 < map.height {
@@ -165,6 +174,7 @@ fn append_tile_geometry(
         Vec3::new(x0, bsw.min(sw.y), z1),
         RampDirection::South,
         tile_layer,
+        se.y.max(sw.y),
     );
 
     let (bnw, bsw) = if x > 0 {
@@ -180,6 +190,7 @@ fn append_tile_geometry(
         Vec3::new(x0, bnw.min(nw.y), z0),
         RampDirection::West,
         tile_layer,
+        sw.y.max(nw.y),
     );
 
     let (bne, bse) = if x + 1 < map.width {
@@ -195,6 +206,7 @@ fn append_tile_geometry(
         Vec3::new(x1, bse.min(se.y), z1),
         RampDirection::East,
         tile_layer,
+        ne.y.max(se.y),
     );
 }
 
@@ -253,7 +265,13 @@ impl MeshBuffers {
         }
     }
 
-    fn push_quad(&mut self, verts: [Vec3; 4], tex: [[f32; 2]; 4], tile_layer: Option<f32>) {
+    fn push_quad(
+        &mut self,
+        verts: [Vec3; 4],
+        tex: [[f32; 2]; 4],
+        tile_layer: Option<f32>,
+        seam_height: f32,
+    ) {
         push_quad(
             &mut self.positions,
             &mut self.normals,
@@ -263,7 +281,7 @@ impl MeshBuffers {
             &mut self.next_index,
             verts,
             tex,
-            tile_layer,
+            tile_layer.map(|layer| [layer, seam_height]),
         );
     }
 
@@ -275,6 +293,7 @@ impl MeshBuffers {
         bottom_b: Vec3,
         direction: RampDirection,
         tile_layer: Option<f32>,
+        seam_height: f32,
     ) {
         add_side_face(
             &mut self.positions,
@@ -289,6 +308,7 @@ impl MeshBuffers {
             bottom_b,
             direction,
             tile_layer,
+            seam_height,
         );
     }
 
@@ -318,7 +338,7 @@ fn push_quad(
     next_index: &mut u32,
     verts: [Vec3; 4],
     tex: [[f32; 2]; 4],
-    tile_layer: Option<f32>,
+    tile_info: Option<[f32; 2]>,
 ) {
     push_triangle(
         positions, normals, uvs, indices, next_index, verts[0], verts[1], verts[2], tex[0], tex[1],
@@ -330,9 +350,8 @@ fn push_quad(
     );
 
     if let Some(layers) = tile_layers {
-        let value = tile_layer.unwrap_or(0.0);
         for _ in 0..6 {
-            layers.push([value, 0.0]);
+            layers.push(tile_info.unwrap_or([0.0, 0.0]));
         }
     }
 }
@@ -377,6 +396,7 @@ fn add_side_face(
     bottom_b: Vec3,
     direction: RampDirection,
     tile_layer: Option<f32>,
+    seam_height: f32,
 ) {
     const EPS: f32 = 1e-4;
     if (top_a.y - bottom_a.y).abs() < EPS && (top_b.y - bottom_b.y).abs() < EPS {
@@ -399,6 +419,87 @@ fn add_side_face(
         next_index,
         verts,
         tex,
-        tile_layer,
+        tile_layer.map(|layer| [layer, seam_height]),
     );
+}
+
+pub mod splatmap {
+    use super::*;
+    use bevy::render::render_asset::RenderAssetUsages;
+    use bevy::render::render_resource::Extent3d;
+    use bevy::render::texture::{ImageAddressMode, ImageFilterMode, ImageSamplerDescriptor};
+
+    const CHANNELS: usize = 4;
+
+    pub fn create(map: &TileMap) -> Image {
+        let extent = extent_from_map(map);
+        let mut image = Image::new_fill(
+            extent,
+            TextureDimension::D2,
+            &[0u8; CHANNELS],
+            TextureFormat::Rgba8Unorm,
+            RenderAssetUsages::default(),
+        );
+        configure_image(&mut image);
+        write(map, &mut image);
+        image
+    }
+
+    pub fn write(map: &TileMap, image: &mut Image) {
+        let extent = extent_from_map(map);
+        if image.texture_descriptor.size != extent
+            || image.texture_descriptor.format != TextureFormat::Rgba8Unorm
+        {
+            *image = create(map);
+            return;
+        }
+
+        configure_image(image);
+
+        let width = extent.width as usize;
+        let required_len = width * (extent.height as usize) * CHANNELS;
+        if image.data.len() != required_len {
+            image.data.resize(required_len, 0);
+        }
+
+        if map.width == 0 || map.height == 0 {
+            image.data.fill(0);
+            return;
+        }
+
+        for y in 0..map.height as usize {
+            for x in 0..map.width as usize {
+                let mut pixel = [0u8; CHANNELS];
+                let tile = map.get(x as u32, y as u32);
+                let layer = tile.tile_type.as_index();
+                if layer < CHANNELS {
+                    pixel[layer] = 255;
+                }
+
+                let idx = (y * width + x) * CHANNELS;
+                image.data[idx..idx + CHANNELS].copy_from_slice(&pixel);
+            }
+        }
+    }
+
+    fn extent_from_map(map: &TileMap) -> Extent3d {
+        Extent3d {
+            width: map.width.max(1),
+            height: map.height.max(1),
+            depth_or_array_layers: 1,
+        }
+    }
+
+    fn configure_image(image: &mut Image) {
+        image.texture_descriptor.mip_level_count = 1;
+        image.texture_descriptor.usage = TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST;
+        image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+            mag_filter: ImageFilterMode::Linear,
+            min_filter: ImageFilterMode::Linear,
+            mipmap_filter: ImageFilterMode::Nearest,
+            address_mode_u: ImageAddressMode::ClampToEdge,
+            address_mode_v: ImageAddressMode::ClampToEdge,
+            ..Default::default()
+        });
+    }
 }

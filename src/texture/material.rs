@@ -34,6 +34,9 @@ fn default_uv_scale() -> f32 {
 pub struct TerrainMaterialParams {
     pub uv_scale: f32,
     pub layer_count: u32,
+    pub map_size: Vec2,
+    pub tile_size: f32,
+    pub cliff_blend_height: f32,
     #[allow(dead_code)]
     pub _padding: Vec2,
 }
@@ -43,6 +46,9 @@ impl Default for TerrainMaterialParams {
         Self {
             uv_scale: default_uv_scale(),
             layer_count: 0,
+            map_size: Vec2::splat(1.0),
+            tile_size: TILE_SIZE,
+            cliff_blend_height: 0.2,
             _padding: Vec2::ZERO,
         }
     }
@@ -64,6 +70,10 @@ pub struct TerrainMaterialExtension {
     #[texture(105, dimension = "2d_array")]
     #[sampler(106)]
     pub roughness_array: Option<Handle<Image>>,
+
+    #[texture(107, dimension = "2d")]
+    #[sampler(108)]
+    pub splat_map: Option<Handle<Image>>,
 }
 
 impl Default for TerrainMaterialExtension {
@@ -73,6 +83,7 @@ impl Default for TerrainMaterialExtension {
             base_color_array: None,
             normal_array: None,
             roughness_array: None,
+            splat_map: None,
         }
     }
 }
@@ -110,6 +121,9 @@ impl MaterialExtension for TerrainMaterialExtension {
 
             frag.shader_defs
                 .push("TERRAIN_MATERIAL_EXTENSION_ROUGHNESS_ARRAY".into());
+
+            frag.shader_defs
+                .push("TERRAIN_MATERIAL_EXTENSION_SPLAT_MAP".into());
 
             // frag.shader_defs.push("DEBUG_ROUGHNESS".into());
             // frag.shader_defs.push("DEBUG_NORMALS".into());
@@ -163,15 +177,9 @@ pub fn load_terrain_material(
     // });
     // let dispersion_handle: Option<Handle<Image>> = dispersion.map(|path| asset_server.load(path));
 
-    let normal_handle: Option<Handle<Image>> = normal.map(|path| {
-        asset_server.load(path)
-    });
-    let roughness_handle: Option<Handle<Image>> = roughness.map(|path| {
-        asset_server.load(path)
-    });
-    let dispersion_handle: Option<Handle<Image>> = dispersion.map(|path| {
-        asset_server.load(path)
-    });
+    let normal_handle: Option<Handle<Image>> = normal.map(|path| asset_server.load(path));
+    let roughness_handle: Option<Handle<Image>> = roughness.map(|path| asset_server.load(path));
+    let dispersion_handle: Option<Handle<Image>> = dispersion.map(|path| asset_server.load(path));
 
     info!("roughness_handle:");
     info!("{:?}", roughness_handle);
@@ -221,15 +229,12 @@ pub fn fix_roughness_images_on_load(
         match image.texture_descriptor.format {
             TextureFormat::R8Unorm | TextureFormat::R32Float => continue,
             _ => {
-
                 // Coerce if it's an RGBA EXR or something else heavy
                 if image.texture_descriptor.format == TextureFormat::Rgba32Float {
-
                     if let Some(path) = asset_server.get_path(handle) {
                         info!("Inspecting roughness map @: {}", path.path().display());
                     }
                     info!("Found a roughness map with type TextureFormat::Rgba32Float");
-
 
                     // Downcast: grab red channel as f32 and rebuild buffer
                     let new_data: Vec<f32> = image
@@ -256,9 +261,11 @@ pub fn fix_roughness_images_on_load(
                             TextureFormat::Rgba8UnormSrgb => {
                                 image.texture_descriptor.format = TextureFormat::Rgba8Unorm;
 
-                                info!("Roughness image format: {:?}", image.texture_descriptor.format);
+                                info!(
+                                    "Roughness image format: {:?}",
+                                    image.texture_descriptor.format
+                                );
                                 info!("First few bytes: {:?}", &image.data[..16]);
-
                             }
                             _ => {}
                         }
@@ -268,7 +275,6 @@ pub fn fix_roughness_images_on_load(
         }
     }
 }
-
 
 pub fn create_runtime_material(materials: &mut Assets<TerrainMaterial>) -> Handle<TerrainMaterial> {
     let base = StandardMaterial {
