@@ -338,46 +338,46 @@ fn fragment(
         let mask = decode_top_blend_mask(in.color.g);
         if (mask.x < 0.5 || mask.y < 0.5 || mask.z < 0.5 || mask.w < 0.5) {
             let tile_size = max(terrain_material_extension.tile_size, 0.0001);
+            let safe_map = max(terrain_material_extension.map_size, vec2<f32>(1.0, 1.0));
             let tile_space = pbr_input.world_position.xz / tile_size;
-            let map_size_f = max(terrain_material_extension.map_size, vec2<f32>(1.0, 1.0));
-            let map_size_i = vec2<i32>(map_size_f);
-            let max_tile = max(map_size_i - vec2<i32>(1, 1), vec2<i32>(0, 0));
             let tile_base_f = floor(tile_space);
-            let tile_base = clamp(vec2<i32>(tile_base_f), vec2<i32>(0, 0), max_tile);
-            let center_uv = (vec2<f32>(tile_base) + vec2<f32>(0.5, 0.5)) / map_size_f;
-            let center_weights = textureSampleLevel(
-                terrain_splat_map,
-                terrain_splat_sampler,
-                center_uv,
-                0.0,
-            );
-            let local = fract(tile_space);
-            let edge_width = 0.2;
-            var reject = 0.0;
+            let map_size_i = vec2<i32>(safe_map);
+            let max_tile = max(map_size_i - vec2<i32>(1, 1), vec2<i32>(0, 0));
+            let tile_base_i = clamp(vec2<i32>(tile_base_f), vec2<i32>(0, 0), max_tile);
+            let tile_base = vec2<f32>(tile_base_i);
+            let local = tile_space - tile_base;
+            var adjusted = local;
+            var needs_adjustment = false;
 
             if (mask.x < 0.5) {
-                let influence = clamp((edge_width - local.y) / edge_width, 0.0, 1.0);
-                reject = max(reject, influence);
+                adjusted.y = max(adjusted.y, 0.5);
+                needs_adjustment = true;
             }
 
             if (mask.y < 0.5) {
-                let influence = clamp((edge_width - (1.0 - local.y)) / edge_width, 0.0, 1.0);
-                reject = max(reject, influence);
+                adjusted.y = min(adjusted.y, 0.5);
+                needs_adjustment = true;
             }
 
             if (mask.z < 0.5) {
-                let influence = clamp((edge_width - local.x) / edge_width, 0.0, 1.0);
-                reject = max(reject, influence);
+                adjusted.x = max(adjusted.x, 0.5);
+                needs_adjustment = true;
             }
 
             if (mask.w < 0.5) {
-                let influence = clamp((edge_width - (1.0 - local.x)) / edge_width, 0.0, 1.0);
-                reject = max(reject, influence);
+                adjusted.x = min(adjusted.x, 0.5);
+                needs_adjustment = true;
             }
 
-            if (reject > 0.0001) {
-                let blend_amount = clamp(reject, 0.0, 1.0);
-                weights = mix(weights, center_weights, blend_amount);
+            if (needs_adjustment) {
+                let sample_uv = (tile_base + adjusted) / safe_map;
+                let clamped_uv = clamp(sample_uv, vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 1.0));
+                weights = textureSampleLevel(
+                    terrain_splat_map,
+                    terrain_splat_sampler,
+                    clamped_uv,
+                    0.0,
+                );
             }
         }
     }
