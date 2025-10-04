@@ -139,16 +139,20 @@ fn append_tile_geometry(
     let sw = Vec3::new(x0, corners[CORNER_SW], z1);
     let se = Vec3::new(x1, corners[CORNER_SE], z1);
 
-    let top_height = corners
-        .into_iter()
-        .fold(f32::NEG_INFINITY, |acc, value| acc.max(value));
+    let top_height = max_corner_height(corners);
+
+    let top_color_info = if tile_layer.is_some() {
+        Some(tile_top_blend_mask(map, corner_cache, x, y, top_height))
+    } else {
+        None
+    };
 
     buffer.push_quad(
         [nw, sw, se, ne],
         [[0.0, 0.0]; 4],
         tile_layer,
         top_height,
-        None,
+        top_color_info,
     );
 
     let (bnw, bne) = if y > 0 {
@@ -457,6 +461,54 @@ fn push_triangle(
     uvs.push(tc);
     indices.extend_from_slice(&[*next_index, *next_index + 1, *next_index + 2]);
     *next_index += 3;
+}
+
+fn tile_top_blend_mask(
+    map: &TileMap,
+    corner_cache: &[[f32; 4]],
+    x: u32,
+    y: u32,
+    top_height: f32,
+) -> [f32; 4] {
+    const HEIGHT_EPSILON: f32 = 0.01;
+
+    let mut mask_bits: u32 = 0;
+
+    if y > 0 {
+        let neighbor = corner_cache[map.idx(x, y - 1)];
+        if (top_height - max_corner_height(neighbor)).abs() < HEIGHT_EPSILON {
+            mask_bits |= 0b0001;
+        }
+    }
+
+    if y + 1 < map.height {
+        let neighbor = corner_cache[map.idx(x, y + 1)];
+        if (top_height - max_corner_height(neighbor)).abs() < HEIGHT_EPSILON {
+            mask_bits |= 0b0010;
+        }
+    }
+
+    if x > 0 {
+        let neighbor = corner_cache[map.idx(x - 1, y)];
+        if (top_height - max_corner_height(neighbor)).abs() < HEIGHT_EPSILON {
+            mask_bits |= 0b0100;
+        }
+    }
+
+    if x + 1 < map.width {
+        let neighbor = corner_cache[map.idx(x + 1, y)];
+        if (top_height - max_corner_height(neighbor)).abs() < HEIGHT_EPSILON {
+            mask_bits |= 0b1000;
+        }
+    }
+
+    [-2.0, mask_bits as f32, 0.0, 0.0]
+}
+
+fn max_corner_height(corners: [f32; 4]) -> f32 {
+    corners
+        .into_iter()
+        .fold(f32::NEG_INFINITY, |acc, value| acc.max(value))
 }
 
 fn add_side_face(

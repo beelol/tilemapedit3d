@@ -275,6 +275,22 @@ fn cliff_layer_for_tile(tile_type: u32) -> u32 {
     }
 }
 
+fn mask_float(condition: bool) -> f32 {
+    if (condition) {
+        return 1.0;
+    }
+    return 0.0;
+}
+
+fn decode_top_blend_mask(mask_bits: f32) -> vec4<f32> {
+    let bits = max(i32(round(mask_bits)), 0);
+    let north = mask_float((bits & 0b0001) != 0);
+    let south = mask_float((bits & 0b0010) != 0);
+    let west = mask_float((bits & 0b0100) != 0);
+    let east = mask_float((bits & 0b1000) != 0);
+    return vec4<f32>(north, south, west, east);
+}
+
 @fragment
 fn fragment(
 #ifdef MESHLET_MESH_MATERIAL_PASS
@@ -316,6 +332,56 @@ fn fragment(
         terrain_splat_sampler,
         world_to_splat_uv(pbr_input.world_position.xyz),
     );
+#ifdef VERTEX_COLORS
+    let is_top_face = abs(pbr_input.world_normal.y) >= 0.5;
+    if (is_top_face && in.color.r < -1.5) {
+        let mask = decode_top_blend_mask(in.color.g);
+        if (mask.x < 0.5 || mask.y < 0.5 || mask.z < 0.5 || mask.w < 0.5) {
+            let tile_size = max(terrain_material_extension.tile_size, 0.0001);
+            let tile_space = pbr_input.world_position.xz / tile_size;
+            let map_size_f = max(terrain_material_extension.map_size, vec2<f32>(1.0, 1.0));
+            let map_size_i = vec2<i32>(map_size_f);
+            let max_tile = max(map_size_i - vec2<i32>(1, 1), vec2<i32>(0, 0));
+            let tile_base_f = floor(tile_space);
+            let tile_base = clamp(vec2<i32>(tile_base_f), vec2<i32>(0, 0), max_tile);
+            let center_uv = (vec2<f32>(tile_base) + vec2<f32>(0.5, 0.5)) / map_size_f;
+            let center_weights = textureSampleLevel(
+                terrain_splat_map,
+                terrain_splat_sampler,
+                center_uv,
+                0.0,
+            );
+            let local = fract(tile_space);
+            let edge_width = 0.2;
+            var reject = 0.0;
+
+            if (mask.x < 0.5) {
+                let influence = clamp((edge_width - local.y) / edge_width, 0.0, 1.0);
+                reject = max(reject, influence);
+            }
+
+            if (mask.y < 0.5) {
+                let influence = clamp((edge_width - (1.0 - local.y)) / edge_width, 0.0, 1.0);
+                reject = max(reject, influence);
+            }
+
+            if (mask.z < 0.5) {
+                let influence = clamp((edge_width - local.x) / edge_width, 0.0, 1.0);
+                reject = max(reject, influence);
+            }
+
+            if (mask.w < 0.5) {
+                let influence = clamp((edge_width - (1.0 - local.x)) / edge_width, 0.0, 1.0);
+                reject = max(reject, influence);
+            }
+
+            if (reject > 0.0001) {
+                let blend_amount = clamp(reject, 0.0, 1.0);
+                weights = mix(weights, center_weights, blend_amount);
+            }
+        }
+    }
+#endif
 #else
     var weights = vec4<f32>(0.0, 0.0, 0.0, 0.0);
 #endif
