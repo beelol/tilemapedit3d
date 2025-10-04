@@ -199,9 +199,6 @@ fn triplanar_sample_layer_scalar(
 #endif
 
 const MAX_TERRAIN_LAYERS: u32 = 4u;
-const CLIFF_ROCK_LAYER: u32 = 2u;
-// TODO: Replace with a dedicated sandstone cliff layer when the asset is available.
-const CLIFF_SANDSTONE_LAYER: u32 = 2u;
 
 fn assign_weight(weights: vec4<f32>, index: u32, value: f32) -> vec4<f32> {
     var result = weights;
@@ -253,26 +250,6 @@ fn clamp_layer_index(layer: i32, available_layers: u32) -> i32 {
     }
     let max_layer = i32(available_layers) - 1;
     return clamp(layer, 0, max_layer);
-}
-
-fn cliff_layer_for_tile(tile_type: u32) -> u32 {
-    switch tile_type {
-        case 0u: {
-            return CLIFF_ROCK_LAYER;
-        }
-        case 1u: {
-            return CLIFF_ROCK_LAYER;
-        }
-        case 2u: {
-            return CLIFF_ROCK_LAYER;
-        }
-        case 3u: {
-            return CLIFF_SANDSTONE_LAYER;
-        }
-        default: {
-            return CLIFF_ROCK_LAYER;
-        }
-    }
 }
 
 @fragment
@@ -438,15 +415,27 @@ fn fragment(
         let fallback_source = 0.0;
 #endif
         let top_layer_index = clamp_layer_index(i32(round(fallback_source)), available_layers);
-        let top_layer = u32(top_layer_index);
-        let cliff_layer = clamp_layer_index(
-            i32(cliff_layer_for_tile(top_layer)),
+        let seam_height = in.uv_b.y;
+        let bottom_data = in.uv.xy;
+        let bottom_layer_index = clamp_layer_index(
+            i32(round(bottom_data.x)),
             available_layers,
         );
-        let seam_height = in.uv_b.y;
-        let safe_blend = max(terrain_material_extension.cliff_blend_height, 0.0001);
-        let delta = seam_height - pbr_input.world_position.y;
-        let blend = clamp(1.0 - (delta / safe_blend), 0.0, 1.0);
+        let bottom_height = bottom_data.y;
+        let height_range = max(seam_height - bottom_height, 0.0001);
+        let normalized_height = clamp(
+            (pbr_input.world_position.y - bottom_height) / height_range,
+            0.0,
+            1.0,
+        );
+        let blend_width_ratio = clamp(
+            terrain_material_extension.cliff_blend_height / height_range,
+            0.0,
+            0.25,
+        );
+        let lower_edge = blend_width_ratio;
+        let upper_edge = 1.0 - blend_width_ratio;
+        let blend = smoothstep(lower_edge, upper_edge, normalized_height);
 
 #ifdef TERRAIN_MATERIAL_EXTENSION_BASE_COLOR_ARRAY
         let top_sample = triplanar_sample_layer(
@@ -457,15 +446,15 @@ fn fragment(
             scale,
             top_layer_index,
         );
-        let cliff_sample = triplanar_sample_layer(
+        let bottom_sample = triplanar_sample_layer(
             terrain_base_color_array,
             terrain_base_color_sampler,
             pbr_input.world_position.xyz,
             pbr_input.world_normal.xyz,
             scale,
-            cliff_layer,
+            bottom_layer_index,
         );
-        base_color = vec4<f32>(mix(cliff_sample.rgb, top_sample.rgb, blend), 1.0);
+        base_color = vec4<f32>(mix(bottom_sample.rgb, top_sample.rgb, blend), 1.0);
 #endif
 
 #ifdef TERRAIN_MATERIAL_EXTENSION_NORMAL_ARRAY
@@ -477,15 +466,15 @@ fn fragment(
             scale,
             top_layer_index,
         );
-        let cliff_normal = triplanar_sample_layer_normal(
+        let bottom_normal = triplanar_sample_layer_normal(
             terrain_normal_array,
             terrain_normal_sampler,
             pbr_input.world_position.xyz,
             pbr_input.world_normal.xyz,
             scale,
-            cliff_layer,
+            bottom_layer_index,
         );
-        let blended_normal = normalize(mix(cliff_normal, top_normal, blend));
+        let blended_normal = normalize(mix(bottom_normal, top_normal, blend));
         pbr_input.N = blended_normal;
         pbr_input.clearcoat_N = blended_normal;
 #endif
@@ -499,15 +488,15 @@ fn fragment(
             scale,
             top_layer_index,
         );
-        let cliff_rough = triplanar_sample_layer_scalar(
+        let bottom_rough = triplanar_sample_layer_scalar(
             terrain_roughness_array,
             terrain_roughness_sampler,
             pbr_input.world_position.xyz,
             pbr_input.world_normal.xyz,
             scale,
-            cliff_layer,
+            bottom_layer_index,
         );
-        let blended_rough = mix(cliff_rough, top_rough, blend);
+        let blended_rough = mix(bottom_rough, top_rough, blend);
         let rough_min: f32 = 0.2;
         let rough_max: f32 = 0.9;
         let remapped = mix(rough_min, rough_max, clamp(blended_rough, 0.0, 1.0));
