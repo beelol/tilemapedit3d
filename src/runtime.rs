@@ -1,11 +1,13 @@
 use crate::editor::EditorState;
-use crate::terrain::{self, TerrainMeshSet};
+use crate::terrain::{self, TerrainMeshSet, splatmap};
 use crate::texture::material::{self, TerrainMaterial};
 use crate::texture::registry::TerrainTextureRegistry;
-use crate::types::TileType;
+use crate::types::{TILE_SIZE, TileType};
 use bevy::asset::{AssetId, LoadState};
+use bevy::math::{UVec2, Vec2};
 use bevy::pbr::MaterialMeshBundle;
 use bevy::prelude::*;
+use bevy::render::texture::Image;
 
 pub struct RuntimePlugin;
 
@@ -14,9 +16,12 @@ impl Plugin for RuntimePlugin {
         app.add_systems(Startup, setup_runtime_mesh).add_systems(
             Update,
             (
-                rebuild_runtime_mesh.in_set(TerrainMeshSet::Rebuild),
-                update_runtime_material.in_set(TerrainMeshSet::Rebuild),
-            ),
+                generate_splat_map,
+                rebuild_runtime_mesh,
+                update_runtime_material,
+            )
+                .chain()
+                .in_set(TerrainMeshSet::Rebuild),
         );
     }
 }
@@ -28,13 +33,23 @@ pub struct RuntimeTerrainVisual {
     pub entity: Entity,
 }
 
+#[derive(Resource)]
+pub struct RuntimeSplatMap {
+    pub handle: Handle<Image>,
+    pub size: UVec2,
+}
+
 fn setup_runtime_mesh(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<TerrainMaterial>>,
+    mut images: ResMut<Assets<Image>>,
+    state: Res<EditorState>,
 ) {
     let mesh = meshes.add(terrain::empty_mesh());
     let material = material::create_runtime_material(&mut materials);
+    let splat_image = splatmap::create(&state.map);
+    let splat_handle = images.add(splat_image);
     let entity = commands
         .spawn((
             MaterialMeshBundle {
@@ -52,6 +67,10 @@ fn setup_runtime_mesh(
         mesh,
         material,
         entity,
+    });
+    commands.insert_resource(RuntimeSplatMap {
+        handle: splat_handle,
+        size: UVec2::new(state.map.width.max(1), state.map.height.max(1)),
     });
 }
 
@@ -75,6 +94,27 @@ fn rebuild_runtime_mesh(
     }
 }
 
+fn generate_splat_map(
+    state: Res<EditorState>,
+    mut runtime_splat: Option<ResMut<RuntimeSplatMap>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    if !state.map_dirty {
+        return;
+    }
+
+    let Some(mut runtime_splat) = runtime_splat else {
+        return;
+    };
+
+    let Some(image) = images.get_mut(&runtime_splat.handle) else {
+        return;
+    };
+
+    splatmap::write(&state.map, image);
+    runtime_splat.size = UVec2::new(state.map.width.max(1), state.map.height.max(1));
+}
+
 fn update_runtime_material(
     mut textures: ResMut<TerrainTextureRegistry>,
     mut images: ResMut<Assets<Image>>,
@@ -82,6 +122,7 @@ fn update_runtime_material(
     asset_server: Res<AssetServer>,
     runtime: Option<Res<RuntimeTerrainVisual>>,
     mut visibility_query: Query<&mut Visibility>,
+    splat: Option<Res<RuntimeSplatMap>>,
 ) {
     let Some(runtime) = runtime else {
         return;
@@ -138,6 +179,11 @@ fn update_runtime_material(
     }
 
     let Some(material) = materials.get_mut(&runtime.material) else {
+        *visibility = Visibility::Hidden;
+        return;
+    };
+
+    let Some(splat) = splat else {
         *visibility = Visibility::Hidden;
         return;
     };
@@ -207,6 +253,20 @@ fn update_runtime_material(
             material.extension.roughness_array = None;
         }
     }
+
+    if material
+        .extension
+        .splat_map
+        .as_ref()
+        .map(|existing| existing != &splat.handle)
+        .unwrap_or(true)
+    {
+        material.extension.splat_map = Some(splat.handle.clone());
+    }
+
+    material.extension.params.map_size = Vec2::new(splat.size.x as f32, splat.size.y as f32);
+    material.extension.params.tile_size = TILE_SIZE;
+    material.extension.params.cliff_blend_height = 0.2;
 
     *visibility = Visibility::Visible;
 }
