@@ -445,18 +445,23 @@ fn fragment(
         );
         let seam_height = in.uv_b.y;
         let safe_blend = max(terrain_material_extension.cliff_blend_height, 0.0001);
-        let delta = seam_height - pbr_input.world_position.y;
-        let blend = clamp(1.0 - (delta / safe_blend), 0.0, 1.0);
+        let top_delta = seam_height - pbr_input.world_position.y;
+        let top_blend = clamp(1.0 - (top_delta / safe_blend), 0.0, 1.0);
+
+        var bottom_blend = 0.0;
+        var bottom_layer_index = top_layer_index;
+        var has_bottom = false;
+#ifdef VERTEX_COLORS
+        if (in.color.r >= 0.0) {
+            let candidate = clamp_layer_index(i32(round(in.color.r)), available_layers);
+            bottom_layer_index = candidate;
+            let bottom_delta = pbr_input.world_position.y - in.color.g;
+            bottom_blend = clamp(1.0 - (bottom_delta / safe_blend), 0.0, 1.0);
+            has_bottom = true;
+        }
+#endif
 
 #ifdef TERRAIN_MATERIAL_EXTENSION_BASE_COLOR_ARRAY
-        let top_sample = triplanar_sample_layer(
-            terrain_base_color_array,
-            terrain_base_color_sampler,
-            pbr_input.world_position.xyz,
-            pbr_input.world_normal.xyz,
-            scale,
-            top_layer_index,
-        );
         let cliff_sample = triplanar_sample_layer(
             terrain_base_color_array,
             terrain_base_color_sampler,
@@ -465,18 +470,39 @@ fn fragment(
             scale,
             cliff_layer,
         );
-        base_color = vec4<f32>(mix(cliff_sample.rgb, top_sample.rgb, blend), 1.0);
+        var color_accum = cliff_sample.rgb;
+        var color_weight = 1.0;
+
+        if (top_blend > 0.0001) {
+            let top_sample = triplanar_sample_layer(
+                terrain_base_color_array,
+                terrain_base_color_sampler,
+                pbr_input.world_position.xyz,
+                pbr_input.world_normal.xyz,
+                scale,
+                top_layer_index,
+            );
+            color_accum += top_sample.rgb * top_blend;
+            color_weight += top_blend;
+        }
+
+        if (has_bottom && bottom_blend > 0.0001) {
+            let bottom_sample = triplanar_sample_layer(
+                terrain_base_color_array,
+                terrain_base_color_sampler,
+                pbr_input.world_position.xyz,
+                pbr_input.world_normal.xyz,
+                scale,
+                bottom_layer_index,
+            );
+            color_accum += bottom_sample.rgb * bottom_blend;
+            color_weight += bottom_blend;
+        }
+
+        base_color = vec4<f32>(color_accum / color_weight, 1.0);
 #endif
 
 #ifdef TERRAIN_MATERIAL_EXTENSION_NORMAL_ARRAY
-        let top_normal = triplanar_sample_layer_normal(
-            terrain_normal_array,
-            terrain_normal_sampler,
-            pbr_input.world_position.xyz,
-            pbr_input.world_normal.xyz,
-            scale,
-            top_layer_index,
-        );
         let cliff_normal = triplanar_sample_layer_normal(
             terrain_normal_array,
             terrain_normal_sampler,
@@ -485,20 +511,41 @@ fn fragment(
             scale,
             cliff_layer,
         );
-        let blended_normal = normalize(mix(cliff_normal, top_normal, blend));
+        var normal_accum = cliff_normal;
+        var normal_weight = 1.0;
+
+        if (top_blend > 0.0001) {
+            let top_normal = triplanar_sample_layer_normal(
+                terrain_normal_array,
+                terrain_normal_sampler,
+                pbr_input.world_position.xyz,
+                pbr_input.world_normal.xyz,
+                scale,
+                top_layer_index,
+            );
+            normal_accum += top_normal * top_blend;
+            normal_weight += top_blend;
+        }
+
+        if (has_bottom && bottom_blend > 0.0001) {
+            let bottom_normal = triplanar_sample_layer_normal(
+                terrain_normal_array,
+                terrain_normal_sampler,
+                pbr_input.world_position.xyz,
+                pbr_input.world_normal.xyz,
+                scale,
+                bottom_layer_index,
+            );
+            normal_accum += bottom_normal * bottom_blend;
+            normal_weight += bottom_blend;
+        }
+
+        let blended_normal = normalize(normal_accum / normal_weight);
         pbr_input.N = blended_normal;
         pbr_input.clearcoat_N = blended_normal;
 #endif
 
 #ifdef TERRAIN_MATERIAL_EXTENSION_ROUGHNESS_ARRAY
-        let top_rough = triplanar_sample_layer_scalar(
-            terrain_roughness_array,
-            terrain_roughness_sampler,
-            pbr_input.world_position.xyz,
-            pbr_input.world_normal.xyz,
-            scale,
-            top_layer_index,
-        );
         let cliff_rough = triplanar_sample_layer_scalar(
             terrain_roughness_array,
             terrain_roughness_sampler,
@@ -507,10 +554,39 @@ fn fragment(
             scale,
             cliff_layer,
         );
-        let blended_rough = mix(cliff_rough, top_rough, blend);
+        var roughness_accum = cliff_rough;
+        var roughness_weight = 1.0;
+
+        if (top_blend > 0.0001) {
+            let top_rough = triplanar_sample_layer_scalar(
+                terrain_roughness_array,
+                terrain_roughness_sampler,
+                pbr_input.world_position.xyz,
+                pbr_input.world_normal.xyz,
+                scale,
+                top_layer_index,
+            );
+            roughness_accum += top_rough * top_blend;
+            roughness_weight += top_blend;
+        }
+
+        if (has_bottom && bottom_blend > 0.0001) {
+            let bottom_rough = triplanar_sample_layer_scalar(
+                terrain_roughness_array,
+                terrain_roughness_sampler,
+                pbr_input.world_position.xyz,
+                pbr_input.world_normal.xyz,
+                scale,
+                bottom_layer_index,
+            );
+            roughness_accum += bottom_rough * bottom_blend;
+            roughness_weight += bottom_blend;
+        }
+
         let rough_min: f32 = 0.2;
         let rough_max: f32 = 0.9;
-        let remapped = mix(rough_min, rough_max, clamp(blended_rough, 0.0, 1.0));
+        let averaged = clamp(roughness_accum / roughness_weight, 0.0, 1.0);
+        let remapped = mix(rough_min, rough_max, averaged);
         pbr_input.material.perceptual_roughness = clamp(remapped, 0.045, 1.0);
 #endif
     }
