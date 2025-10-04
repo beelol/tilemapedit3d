@@ -27,7 +27,8 @@ struct TerrainMaterialExtension {
     layer_count: u32,
     map_size: vec2<f32>,
     tile_size: f32,
-    cliff_blend_height: f32,
+    cliff_ceiling_blend_height: f32,
+    cliff_floor_blend_height: f32,
     _padding: vec2<f32>,
 }
 
@@ -510,9 +511,12 @@ fn fragment(
             available_layers,
         );
         let seam_height = in.uv_b.y;
-        let safe_blend = max(terrain_material_extension.cliff_blend_height, 0.0001);
+        let safe_ceiling_blend = max(
+            terrain_material_extension.cliff_ceiling_blend_height,
+            0.0001,
+        );
         let top_delta = seam_height - pbr_input.world_position.y;
-        let top_blend = clamp(1.0 - (top_delta / safe_blend), 0.0, 1.0);
+        let top_blend = clamp(1.0 - (top_delta / safe_ceiling_blend), 0.0, 1.0);
 
         var bottom_blend = 0.0;
         var bottom_layer_index = top_layer_index;
@@ -522,7 +526,11 @@ fn fragment(
             let candidate = clamp_layer_index(i32(round(in.color.r)), available_layers);
             bottom_layer_index = candidate;
             let bottom_delta = pbr_input.world_position.y - in.color.g;
-            bottom_blend = clamp(1.0 - (bottom_delta / safe_blend), 0.0, 1.0);
+            let safe_floor_blend = max(
+                terrain_material_extension.cliff_floor_blend_height,
+                0.0001,
+            );
+            bottom_blend = clamp(1.0 - (bottom_delta / safe_floor_blend), 0.0, 1.0);
             has_bottom = true;
         }
 #endif

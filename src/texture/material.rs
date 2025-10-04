@@ -36,7 +36,8 @@ pub struct TerrainMaterialParams {
     pub layer_count: u32,
     pub map_size: Vec2,
     pub tile_size: f32,
-    pub cliff_blend_height: f32,
+    pub cliff_ceiling_blend_height: f32,
+    pub cliff_floor_blend_height: f32,
     #[allow(dead_code)]
     pub _padding: Vec2,
 }
@@ -48,7 +49,8 @@ impl Default for TerrainMaterialParams {
             layer_count: 0,
             map_size: Vec2::splat(1.0),
             tile_size: TILE_SIZE,
-            cliff_blend_height: 0.2,
+            cliff_ceiling_blend_height: 0.2,
+            cliff_floor_blend_height: 0.2,
             _padding: Vec2::ZERO,
         }
     }
