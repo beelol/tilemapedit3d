@@ -25,6 +25,9 @@
 struct TerrainMaterialExtension {
     uv_scale: f32,
     layer_count: u32,
+    map_size: vec2<f32>,
+    tile_size: f32,
+    cliff_blend_height: f32,
     _padding: vec2<f32>,
 }
 
@@ -237,8 +240,8 @@ fn weight_component(weights: vec4<f32>, index: u32) -> f32 {
 }
 
 fn world_to_splat_uv(world_position: vec3<f32>) -> vec2<f32> {
-    let safe_tile = max(terrain_material_extension.params.tile_size, 0.0001);
-    let safe_map = max(terrain_material_extension.params.map_size, vec2<f32>(1.0, 1.0));
+    let safe_tile = max(terrain_material_extension.tile_size, 0.0001);
+    let safe_map = max(terrain_material_extension.map_size, vec2<f32>(1.0, 1.0));
     let tile_space = world_position.xz / safe_tile;
     let uv = tile_space / safe_map;
     return clamp(uv, vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 1.0));
@@ -441,7 +444,7 @@ fn fragment(
             available_layers,
         );
         let seam_height = in.uv_b.y;
-        let safe_blend = max(terrain_material_extension.params.cliff_blend_height, 0.0001);
+        let safe_blend = max(terrain_material_extension.cliff_blend_height, 0.0001);
         let delta = seam_height - pbr_input.world_position.y;
         let blend = clamp(1.0 - (delta / safe_blend), 0.0, 1.0);
 
