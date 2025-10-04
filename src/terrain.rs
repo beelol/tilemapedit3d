@@ -427,6 +427,7 @@ pub mod splatmap {
     use super::*;
     use bevy::render::render_asset::RenderAssetUsages;
     use bevy::render::render_resource::Extent3d;
+    use bevy::render::texture::{ImageAddressMode, ImageFilterMode, ImageSamplerDescriptor};
 
     const CHANNELS: usize = 4;
 
@@ -492,12 +493,12 @@ pub mod splatmap {
     fn configure_image(image: &mut Image) {
         image.texture_descriptor.mip_level_count = 1;
         image.texture_descriptor.usage = TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST;
-        image.sampler = ImageSampler::Descriptor(SamplerDescriptor {
-            mag_filter: FilterMode::Linear,
-            min_filter: FilterMode::Linear,
-            mipmap_filter: FilterMode::Nearest,
-            address_mode_u: AddressMode::ClampToEdge,
-            address_mode_v: AddressMode::ClampToEdge,
+        image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+            mag_filter: ImageFilterMode::Linear,
+            min_filter: ImageFilterMode::Linear,
+            mipmap_filter: ImageFilterMode::Nearest,
+            address_mode_u: ImageAddressMode::ClampToEdge,
+            address_mode_v: ImageAddressMode::ClampToEdge,
             ..Default::default()
         });
     }
