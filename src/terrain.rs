@@ -151,6 +151,11 @@ fn append_tile_geometry(
     } else {
         (0.0, 0.0)
     };
+    let north_layer = if y > 0 {
+        Some(map.get(x, y - 1).tile_type.as_index() as f32)
+    } else {
+        None
+    };
     buffer.add_side_face(
         nw,
         ne,
@@ -158,6 +163,7 @@ fn append_tile_geometry(
         Vec3::new(x1, bne.min(ne.y), z0),
         RampDirection::North,
         tile_layer,
+        north_layer,
         nw.y.max(ne.y),
     );
 
@@ -167,6 +173,11 @@ fn append_tile_geometry(
     } else {
         (0.0, 0.0)
     };
+    let south_layer = if y + 1 < map.height {
+        Some(map.get(x, y + 1).tile_type.as_index() as f32)
+    } else {
+        None
+    };
     buffer.add_side_face(
         se,
         sw,
@@ -174,6 +185,7 @@ fn append_tile_geometry(
         Vec3::new(x0, bsw.min(sw.y), z1),
         RampDirection::South,
         tile_layer,
+        south_layer,
         se.y.max(sw.y),
     );
 
@@ -183,6 +195,11 @@ fn append_tile_geometry(
     } else {
         (0.0, 0.0)
     };
+    let west_layer = if x > 0 {
+        Some(map.get(x - 1, y).tile_type.as_index() as f32)
+    } else {
+        None
+    };
     buffer.add_side_face(
         sw,
         nw,
@@ -190,6 +207,7 @@ fn append_tile_geometry(
         Vec3::new(x0, bnw.min(nw.y), z0),
         RampDirection::West,
         tile_layer,
+        west_layer,
         sw.y.max(nw.y),
     );
 
@@ -199,6 +217,11 @@ fn append_tile_geometry(
     } else {
         (0.0, 0.0)
     };
+    let east_layer = if x + 1 < map.width {
+        Some(map.get(x + 1, y).tile_type.as_index() as f32)
+    } else {
+        None
+    };
     buffer.add_side_face(
         ne,
         se,
@@ -206,6 +229,7 @@ fn append_tile_geometry(
         Vec3::new(x1, bse.min(se.y), z1),
         RampDirection::East,
         tile_layer,
+        east_layer,
         ne.y.max(se.y),
     );
 }
@@ -293,6 +317,7 @@ impl MeshBuffers {
         bottom_b: Vec3,
         direction: RampDirection,
         tile_layer: Option<f32>,
+        bottom_layer: Option<f32>,
         seam_height: f32,
     ) {
         add_side_face(
@@ -308,6 +333,7 @@ impl MeshBuffers {
             bottom_b,
             direction,
             tile_layer,
+            bottom_layer,
             seam_height,
         );
     }
@@ -396,6 +422,7 @@ fn add_side_face(
     bottom_b: Vec3,
     direction: RampDirection,
     tile_layer: Option<f32>,
+    bottom_layer: Option<f32>,
     seam_height: f32,
 ) {
     const EPS: f32 = 1e-4;
@@ -403,11 +430,26 @@ fn add_side_face(
         return;
     }
 
+    let bottom_value = bottom_layer.or(tile_layer).unwrap_or(0.0);
+    let bottom_height = bottom_a.y.min(bottom_b.y);
+
     let (verts, tex) = match direction {
-        RampDirection::North => ([top_a, top_b, bottom_b, bottom_a], [[0.0, 0.0]; 4]),
-        RampDirection::South => ([top_a, top_b, bottom_b, bottom_a], [[0.0, 0.0]; 4]),
-        RampDirection::West => ([top_a, top_b, bottom_b, bottom_a], [[0.0, 0.0]; 4]),
-        RampDirection::East => ([top_a, top_b, bottom_b, bottom_a], [[0.0, 0.0]; 4]),
+        RampDirection::North => (
+            [top_a, top_b, bottom_b, bottom_a],
+            [[bottom_value, bottom_height]; 4],
+        ),
+        RampDirection::South => (
+            [top_a, top_b, bottom_b, bottom_a],
+            [[bottom_value, bottom_height]; 4],
+        ),
+        RampDirection::West => (
+            [top_a, top_b, bottom_b, bottom_a],
+            [[bottom_value, bottom_height]; 4],
+        ),
+        RampDirection::East => (
+            [top_a, top_b, bottom_b, bottom_a],
+            [[bottom_value, bottom_height]; 4],
+        ),
     };
 
     push_quad(
