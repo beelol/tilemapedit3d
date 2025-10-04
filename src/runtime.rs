@@ -266,7 +266,8 @@ fn update_runtime_material(
 
     material.extension.params.map_size = Vec2::new(splat.size.x as f32, splat.size.y as f32);
     material.extension.params.tile_size = TILE_SIZE;
-    material.extension.params.cliff_blend_height = 0.2;
+    material.extension.params.cliff_ceiling_blend_height = 0.2;
+    material.extension.params.cliff_floor_blend_height = 0.2;
 
     *visibility = Visibility::Visible;
 }
