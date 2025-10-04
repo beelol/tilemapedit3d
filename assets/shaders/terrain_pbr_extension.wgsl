@@ -552,7 +552,7 @@ fn fragment(
                 terrain_base_color_array,
                 terrain_base_color_sampler,
                 pbr_input.world_position.xyz,
-                pbr_input.world_normal.xyz,
+                vec3<f32>(0.0, 1.0, 0.0),
                 scale,
                 top_layer_index,
             );
@@ -565,7 +565,7 @@ fn fragment(
                 terrain_base_color_array,
                 terrain_base_color_sampler,
                 pbr_input.world_position.xyz,
-                pbr_input.world_normal.xyz,
+                vec3<f32>(0.0, -1.0, 0.0),
                 scale,
                 bottom_layer_index,
             );
@@ -587,32 +587,6 @@ fn fragment(
         );
         var normal_accum = cliff_normal;
         var normal_weight = 1.0;
-
-        if (top_blend > 0.0001) {
-            let top_normal = triplanar_sample_layer_normal(
-                terrain_normal_array,
-                terrain_normal_sampler,
-                pbr_input.world_position.xyz,
-                pbr_input.world_normal.xyz,
-                scale,
-                top_layer_index,
-            );
-            normal_accum += top_normal * top_blend;
-            normal_weight += top_blend;
-        }
-
-        if (has_bottom && bottom_blend > 0.0001) {
-            let bottom_normal = triplanar_sample_layer_normal(
-                terrain_normal_array,
-                terrain_normal_sampler,
-                pbr_input.world_position.xyz,
-                pbr_input.world_normal.xyz,
-                scale,
-                bottom_layer_index,
-            );
-            normal_accum += bottom_normal * bottom_blend;
-            normal_weight += bottom_blend;
-        }
 
         let blended_normal = normalize(normal_accum / normal_weight);
         pbr_input.N = blended_normal;
@@ -636,7 +610,7 @@ fn fragment(
                 terrain_roughness_array,
                 terrain_roughness_sampler,
                 pbr_input.world_position.xyz,
-                pbr_input.world_normal.xyz,
+                vec3<f32>(0.0, 1.0, 0.0),
                 scale,
                 top_layer_index,
             );
@@ -649,7 +623,7 @@ fn fragment(
                 terrain_roughness_array,
                 terrain_roughness_sampler,
                 pbr_input.world_position.xyz,
-                pbr_input.world_normal.xyz,
+                vec3<f32>(0.0, -1.0, 0.0),
                 scale,
                 bottom_layer_index,
             );
