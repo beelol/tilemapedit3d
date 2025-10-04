@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::types::{RampDirection, TILE_HEIGHT, TILE_SIZE, TileKind, TileMap, TileType};
 use bevy::ecs::schedule::SystemSet;
 use bevy::prelude::*;
-use bevy::render::mesh::Indices;
+use bevy::render::mesh::{Indices, Mesh};
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{
     AddressMode, FilterMode, PrimitiveTopology, SamplerDescriptor, TextureDimension, TextureFormat,
@@ -139,11 +139,21 @@ fn append_tile_geometry(
     let sw = Vec3::new(x0, corners[CORNER_SW], z1);
     let se = Vec3::new(x1, corners[CORNER_SE], z1);
 
-    let top_height = corners
-        .into_iter()
-        .fold(f32::NEG_INFINITY, |acc, value| acc.max(value));
+    let top_height = max_corner_height(corners);
 
-    buffer.push_quad([nw, sw, se, ne], [[0.0, 0.0]; 4], tile_layer, top_height);
+    let top_color_info = if tile_layer.is_some() {
+        Some(tile_top_blend_mask(map, corner_cache, x, y, top_height))
+    } else {
+        None
+    };
+
+    buffer.push_quad(
+        [nw, sw, se, ne],
+        [[0.0, 0.0]; 4],
+        tile_layer,
+        top_height,
+        top_color_info,
+    );
 
     let (bnw, bne) = if y > 0 {
         let neighbor = corner_cache[map.idx(x, y - 1)];
@@ -151,6 +161,17 @@ fn append_tile_geometry(
     } else {
         (0.0, 0.0)
     };
+    let north_bottom_layer = if y > 0 {
+        Some(map.get(x, y - 1).tile_type.as_index() as f32)
+    } else {
+        None
+    };
+    let north_bottom_info = north_bottom_layer.map(|layer| {
+        let bottom_a_y = bnw.min(nw.y);
+        let bottom_b_y = bne.min(ne.y);
+        let bottom_height = bottom_a_y.max(bottom_b_y);
+        [layer, bottom_height, 0.0, 0.0]
+    });
     buffer.add_side_face(
         nw,
         ne,
@@ -159,6 +180,7 @@ fn append_tile_geometry(
         RampDirection::North,
         tile_layer,
         nw.y.max(ne.y),
+        north_bottom_info,
     );
 
     let (bsw, bse) = if y + 1 < map.height {
@@ -167,6 +189,17 @@ fn append_tile_geometry(
     } else {
         (0.0, 0.0)
     };
+    let south_bottom_layer = if y + 1 < map.height {
+        Some(map.get(x, y + 1).tile_type.as_index() as f32)
+    } else {
+        None
+    };
+    let south_bottom_info = south_bottom_layer.map(|layer| {
+        let bottom_a_y = bse.min(se.y);
+        let bottom_b_y = bsw.min(sw.y);
+        let bottom_height = bottom_a_y.max(bottom_b_y);
+        [layer, bottom_height, 0.0, 0.0]
+    });
     buffer.add_side_face(
         se,
         sw,
@@ -175,6 +208,7 @@ fn append_tile_geometry(
         RampDirection::South,
         tile_layer,
         se.y.max(sw.y),
+        south_bottom_info,
     );
 
     let (bnw, bsw) = if x > 0 {
@@ -183,6 +217,17 @@ fn append_tile_geometry(
     } else {
         (0.0, 0.0)
     };
+    let west_bottom_layer = if x > 0 {
+        Some(map.get(x - 1, y).tile_type.as_index() as f32)
+    } else {
+        None
+    };
+    let west_bottom_info = west_bottom_layer.map(|layer| {
+        let bottom_a_y = bsw.min(sw.y);
+        let bottom_b_y = bnw.min(nw.y);
+        let bottom_height = bottom_a_y.max(bottom_b_y);
+        [layer, bottom_height, 0.0, 0.0]
+    });
     buffer.add_side_face(
         sw,
         nw,
@@ -191,6 +236,7 @@ fn append_tile_geometry(
         RampDirection::West,
         tile_layer,
         sw.y.max(nw.y),
+        west_bottom_info,
     );
 
     let (bne, bse) = if x + 1 < map.width {
@@ -199,6 +245,17 @@ fn append_tile_geometry(
     } else {
         (0.0, 0.0)
     };
+    let east_bottom_layer = if x + 1 < map.width {
+        Some(map.get(x + 1, y).tile_type.as_index() as f32)
+    } else {
+        None
+    };
+    let east_bottom_info = east_bottom_layer.map(|layer| {
+        let bottom_a_y = bse.min(se.y);
+        let bottom_b_y = bne.min(ne.y);
+        let bottom_height = bottom_a_y.max(bottom_b_y);
+        [layer, bottom_height, 0.0, 0.0]
+    });
     buffer.add_side_face(
         ne,
         se,
@@ -207,6 +264,7 @@ fn append_tile_geometry(
         RampDirection::East,
         tile_layer,
         ne.y.max(se.y),
+        east_bottom_info,
     );
 }
 
@@ -253,6 +311,7 @@ struct MeshBuffers {
     normals: Vec<[f32; 3]>,
     uvs: Vec<[f32; 2]>,
     tile_layers: Option<Vec<[f32; 2]>>,
+    colors: Option<Vec<[f32; 4]>>,
     indices: Vec<u32>,
     next_index: u32,
 }
@@ -261,6 +320,7 @@ impl MeshBuffers {
     fn with_tile_types() -> Self {
         Self {
             tile_layers: Some(Vec::new()),
+            colors: Some(Vec::new()),
             ..Default::default()
         }
     }
@@ -271,17 +331,20 @@ impl MeshBuffers {
         tex: [[f32; 2]; 4],
         tile_layer: Option<f32>,
         seam_height: f32,
+        bottom_layer: Option<[f32; 4]>,
     ) {
         push_quad(
             &mut self.positions,
             &mut self.normals,
             &mut self.uvs,
             self.tile_layers.as_mut(),
+            self.colors.as_mut(),
             &mut self.indices,
             &mut self.next_index,
             verts,
             tex,
             tile_layer.map(|layer| [layer, seam_height]),
+            bottom_layer,
         );
     }
 
@@ -294,12 +357,14 @@ impl MeshBuffers {
         direction: RampDirection,
         tile_layer: Option<f32>,
         seam_height: f32,
+        bottom_info: Option<[f32; 4]>,
     ) {
         add_side_face(
             &mut self.positions,
             &mut self.normals,
             &mut self.uvs,
             self.tile_layers.as_mut(),
+            self.colors.as_mut(),
             &mut self.indices,
             &mut self.next_index,
             top_a,
@@ -309,6 +374,7 @@ impl MeshBuffers {
             direction,
             tile_layer,
             seam_height,
+            bottom_info,
         );
     }
 
@@ -320,6 +386,11 @@ impl MeshBuffers {
         if let Some(layers) = self.tile_layers {
             if !layers.is_empty() {
                 mesh.insert_attribute(Mesh::ATTRIBUTE_UV_1, layers);
+            }
+        }
+        if let Some(colors) = self.colors {
+            if !colors.is_empty() {
+                mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
             }
         }
         if !self.indices.is_empty() {
@@ -334,11 +405,13 @@ fn push_quad(
     normals: &mut Vec<[f32; 3]>,
     uvs: &mut Vec<[f32; 2]>,
     tile_layers: Option<&mut Vec<[f32; 2]>>,
+    colors: Option<&mut Vec<[f32; 4]>>,
     indices: &mut Vec<u32>,
     next_index: &mut u32,
     verts: [Vec3; 4],
     tex: [[f32; 2]; 4],
     tile_info: Option<[f32; 2]>,
+    color_info: Option<[f32; 4]>,
 ) {
     push_triangle(
         positions, normals, uvs, indices, next_index, verts[0], verts[1], verts[2], tex[0], tex[1],
@@ -352,6 +425,13 @@ fn push_quad(
     if let Some(layers) = tile_layers {
         for _ in 0..6 {
             layers.push(tile_info.unwrap_or([0.0, 0.0]));
+        }
+    }
+
+    if let Some(colors) = colors {
+        let value = color_info.unwrap_or([-1.0, 0.0, 0.0, 0.0]);
+        for _ in 0..6 {
+            colors.push(value);
         }
     }
 }
@@ -383,11 +463,60 @@ fn push_triangle(
     *next_index += 3;
 }
 
+fn tile_top_blend_mask(
+    map: &TileMap,
+    corner_cache: &[[f32; 4]],
+    x: u32,
+    y: u32,
+    top_height: f32,
+) -> [f32; 4] {
+    const HEIGHT_EPSILON: f32 = 0.01;
+
+    let mut mask_bits: u32 = 0;
+
+    if y > 0 {
+        let neighbor = corner_cache[map.idx(x, y - 1)];
+        if (top_height - max_corner_height(neighbor)).abs() < HEIGHT_EPSILON {
+            mask_bits |= 0b0001;
+        }
+    }
+
+    if y + 1 < map.height {
+        let neighbor = corner_cache[map.idx(x, y + 1)];
+        if (top_height - max_corner_height(neighbor)).abs() < HEIGHT_EPSILON {
+            mask_bits |= 0b0010;
+        }
+    }
+
+    if x > 0 {
+        let neighbor = corner_cache[map.idx(x - 1, y)];
+        if (top_height - max_corner_height(neighbor)).abs() < HEIGHT_EPSILON {
+            mask_bits |= 0b0100;
+        }
+    }
+
+    if x + 1 < map.width {
+        let neighbor = corner_cache[map.idx(x + 1, y)];
+        if (top_height - max_corner_height(neighbor)).abs() < HEIGHT_EPSILON {
+            mask_bits |= 0b1000;
+        }
+    }
+
+    [-2.0, mask_bits as f32, 0.0, 0.0]
+}
+
+fn max_corner_height(corners: [f32; 4]) -> f32 {
+    corners
+        .into_iter()
+        .fold(f32::NEG_INFINITY, |acc, value| acc.max(value))
+}
+
 fn add_side_face(
     positions: &mut Vec<[f32; 3]>,
     normals: &mut Vec<[f32; 3]>,
     uvs: &mut Vec<[f32; 2]>,
     tile_layers: Option<&mut Vec<[f32; 2]>>,
+    colors: Option<&mut Vec<[f32; 4]>>,
     indices: &mut Vec<u32>,
     next_index: &mut u32,
     top_a: Vec3,
@@ -397,6 +526,7 @@ fn add_side_face(
     direction: RampDirection,
     tile_layer: Option<f32>,
     seam_height: f32,
+    bottom_info: Option<[f32; 4]>,
 ) {
     const EPS: f32 = 1e-4;
     if (top_a.y - bottom_a.y).abs() < EPS && (top_b.y - bottom_b.y).abs() < EPS {
@@ -415,11 +545,13 @@ fn add_side_face(
         normals,
         uvs,
         tile_layers,
+        colors,
         indices,
         next_index,
         verts,
         tex,
         tile_layer.map(|layer| [layer, seam_height]),
+        bottom_info,
     );
 }
 
