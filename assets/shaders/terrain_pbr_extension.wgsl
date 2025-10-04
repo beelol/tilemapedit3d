@@ -284,10 +284,10 @@ fn mask_float(condition: bool) -> f32 {
 
 fn decode_top_blend_mask(mask_bits: f32) -> vec4<f32> {
     let bits = max(i32(round(mask_bits)), 0);
-    let north = mask_float((bits & 0b0001) != 0);
-    let south = mask_float((bits & 0b0010) != 0);
-    let west = mask_float((bits & 0b0100) != 0);
-    let east = mask_float((bits & 0b1000) != 0);
+    let north = mask_float((bits & 0x1) != 0);
+    let south = mask_float((bits & 0x2) != 0);
+    let west = mask_float((bits & 0x4) != 0);
+    let east = mask_float((bits & 0x8) != 0);
     return vec4<f32>(north, south, west, east);
 }
 
