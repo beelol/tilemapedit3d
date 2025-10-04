@@ -492,7 +492,7 @@ pub mod splatmap {
     fn configure_image(image: &mut Image) {
         image.texture_descriptor.mip_level_count = 1;
         image.texture_descriptor.usage = TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST;
-        image.sampler_descriptor = ImageSampler::Descriptor(SamplerDescriptor {
+        image.sampler = ImageSampler::Descriptor(SamplerDescriptor {
             mag_filter: FilterMode::Linear,
             min_filter: FilterMode::Linear,
             mipmap_filter: FilterMode::Nearest,
