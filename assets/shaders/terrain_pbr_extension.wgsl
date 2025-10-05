@@ -535,6 +535,8 @@ fn fragment(
         }
 #endif
 
+        let cliff_weight = max(1.0 - max(top_blend, bottom_blend), 0.0);
+
 #ifdef TERRAIN_MATERIAL_EXTENSION_BASE_COLOR_ARRAY
         let cliff_sample = triplanar_sample_layer(
             terrain_base_color_array,
@@ -544,8 +546,8 @@ fn fragment(
             scale,
             cliff_layer,
         );
-        var color_accum = cliff_sample.rgb;
-        var color_weight = 1.0;
+        var color_accum = cliff_sample.rgb * cliff_weight;
+        var color_weight = cliff_weight;
 
         if (top_blend > 0.0001) {
             let top_sample = triplanar_sample_layer(
@@ -573,7 +575,9 @@ fn fragment(
             color_weight += bottom_blend;
         }
 
-        base_color = vec4<f32>(color_accum / color_weight, 1.0);
+        if (color_weight > 0.0001) {
+            base_color = vec4<f32>(color_accum / color_weight, 1.0);
+        }
 #endif
 
 #ifdef TERRAIN_MATERIAL_EXTENSION_NORMAL_ARRAY
@@ -602,8 +606,8 @@ fn fragment(
             scale,
             cliff_layer,
         );
-        var roughness_accum = cliff_rough;
-        var roughness_weight = 1.0;
+        var roughness_accum = cliff_rough * cliff_weight;
+        var roughness_weight = cliff_weight;
 
         if (top_blend > 0.0001) {
             let top_rough = triplanar_sample_layer_scalar(
@@ -631,11 +635,13 @@ fn fragment(
             roughness_weight += bottom_blend;
         }
 
-        let rough_min: f32 = 0.2;
-        let rough_max: f32 = 0.9;
-        let averaged = clamp(roughness_accum / roughness_weight, 0.0, 1.0);
-        let remapped = mix(rough_min, rough_max, averaged);
-        pbr_input.material.perceptual_roughness = clamp(remapped, 0.045, 1.0);
+        if (roughness_weight > 0.0001) {
+            let rough_min: f32 = 0.2;
+            let rough_max: f32 = 0.9;
+            let averaged = clamp(roughness_accum / roughness_weight, 0.0, 1.0);
+            let remapped = mix(rough_min, rough_max, averaged);
+            pbr_input.material.perceptual_roughness = clamp(remapped, 0.045, 1.0);
+        }
 #endif
     }
 
