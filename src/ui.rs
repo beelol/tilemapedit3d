@@ -51,12 +51,6 @@ fn ui_panel(
                 ui.label("Tile:");
                 ui.selectable_value(&mut state.current_kind, TileKind::Floor, "Floor");
                 ui.selectable_value(&mut state.current_kind, TileKind::Ramp, "Ramp");
-
-                ui.separator();
-                ui.label("Elevation:");
-                for e in 0..=3 {
-                    ui.selectable_value(&mut state.current_elev, e, format!("{e}"));
-                }
             }
 
             ui.separator();
