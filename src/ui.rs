@@ -1,5 +1,6 @@
 use crate::editor::EditorTool;
 use crate::io::{load_map, save_map};
+use crate::terrain::TerrainMeshSet;
 use crate::types::*;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
@@ -9,7 +10,7 @@ use crate::texture::registry::TerrainTextureRegistry;
 pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, ui_panel);
+        app.add_systems(Update, ui_panel.after(TerrainMeshSet::Cleanup));
     }
 }
 
