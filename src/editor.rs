@@ -4,6 +4,7 @@ use crate::texture::registry::TerrainTextureRegistry;
 use crate::types::*;
 use bevy::pbr::MaterialMeshBundle;
 use bevy::prelude::*;
+use bevy::tasks::Task;
 use bevy_egui::EguiContexts;
 use std::path::PathBuf;
 
@@ -52,6 +53,8 @@ pub struct EditorState {
     pub map_dirty: bool,
     pub show_grid: bool,
     pub current_file_path: Option<PathBuf>,
+    pub save_dialog_task: Option<Task<Option<PathBuf>>>,
+    pub load_dialog_task: Option<Task<Option<PathBuf>>>,
 }
 impl Default for EditorState {
     fn default() -> Self {
@@ -65,6 +68,8 @@ impl Default for EditorState {
             map_dirty: true,
             show_grid: true,
             current_file_path: None,
+            save_dialog_task: None,
+            load_dialog_task: None,
         }
     }
 }

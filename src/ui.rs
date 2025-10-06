@@ -2,8 +2,9 @@ use crate::editor::EditorTool;
 use crate::io::{load_map, save_map};
 use crate::types::*;
 use bevy::prelude::*;
-use bevy_egui::{EguiContexts, egui};
-use rfd::FileDialog;
+use bevy::tasks::{block_on, IoTaskPool};
+use bevy_egui::{egui, EguiContexts};
+use rfd::AsyncFileDialog;
 
 use crate::texture::registry::TerrainTextureRegistry;
 
@@ -61,8 +62,8 @@ fn ui_panel(
             }
 
             ui.separator();
-            if ui.button("Save…").clicked() {
-                let mut dialog = FileDialog::new();
+            if ui.button("Save…").clicked() && state.save_dialog_task.is_none() {
+                let mut dialog = AsyncFileDialog::new().set_title("Save Map");
                 if let Some(path) = state.current_file_path.as_ref() {
                     if let Some(parent) = path.parent() {
                         dialog = dialog.set_directory(parent);
@@ -72,34 +73,27 @@ fn ui_panel(
                     }
                 }
 
-                if let Some(path) = dialog.save_file() {
-                    if let Err(err) = save_map(&path, &state.map) {
-                        eprintln!("Failed to save map: {err:?}");
-                    } else {
-                        state.current_file_path = Some(path);
-                    }
-                }
+                state.save_dialog_task = Some(IoTaskPool::get().spawn(async move {
+                    dialog
+                        .save_file()
+                        .await
+                        .map(|file| file.path().to_path_buf())
+                }));
             }
-            if ui.button("Load…").clicked() {
-                let mut dialog = FileDialog::new();
+            if ui.button("Load…").clicked() && state.load_dialog_task.is_none() {
+                let mut dialog = AsyncFileDialog::new().set_title("Open Map");
                 if let Some(path) = state.current_file_path.as_ref() {
                     if let Some(parent) = path.parent() {
                         dialog = dialog.set_directory(parent);
                     }
                 }
 
-                if let Some(path) = dialog.pick_file() {
-                    match load_map(&path) {
-                        Ok(m) => {
-                            state.map = m;
-                            state.map_dirty = true;
-                            state.current_file_path = Some(path);
-                        }
-                        Err(err) => {
-                            eprintln!("Failed to load map: {err:?}");
-                        }
-                    }
-                }
+                state.load_dialog_task = Some(IoTaskPool::get().spawn(async move {
+                    dialog
+                        .pick_file()
+                        .await
+                        .map(|file| file.path().to_path_buf())
+                }));
             }
 
             ui.separator();
@@ -167,6 +161,35 @@ fn ui_panel(
             ui.label(format!("Current map: {}", path.display()));
         }
     });
+
+    if let Some(task) = state.save_dialog_task.as_mut() {
+        if task.is_finished() {
+            if let Some(path) = block_on(state.save_dialog_task.take().unwrap()) {
+                if let Err(err) = save_map(&path, &state.map) {
+                    eprintln!("Failed to save map: {err:?}");
+                } else {
+                    state.current_file_path = Some(path);
+                }
+            }
+        }
+    }
+
+    if let Some(task) = state.load_dialog_task.as_mut() {
+        if task.is_finished() {
+            if let Some(path) = block_on(state.load_dialog_task.take().unwrap()) {
+                match load_map(&path) {
+                    Ok(m) => {
+                        state.map = m;
+                        state.map_dirty = true;
+                        state.current_file_path = Some(path);
+                    }
+                    Err(err) => {
+                        eprintln!("Failed to load map: {err:?}");
+                    }
+                }
+            }
+        }
+    }
 }
 
 struct PaletteItem {
