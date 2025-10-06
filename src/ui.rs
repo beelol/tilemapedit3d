@@ -3,6 +3,7 @@ use crate::io::{load_map, save_map};
 use crate::types::*;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
+use rfd::FileDialog;
 
 use crate::texture::registry::TerrainTextureRegistry;
 
@@ -60,13 +61,44 @@ fn ui_panel(
             }
 
             ui.separator();
-            if ui.button("Save").clicked() {
-                save_map("map.json", &state.map).ok();
+            if ui.button("Save…").clicked() {
+                let mut dialog = FileDialog::new();
+                if let Some(path) = state.current_file_path.as_ref() {
+                    if let Some(parent) = path.parent() {
+                        dialog = dialog.set_directory(parent);
+                    }
+                    if let Some(file_name) = path.file_name().and_then(|name| name.to_str()) {
+                        dialog = dialog.set_file_name(file_name);
+                    }
+                }
+
+                if let Some(path) = dialog.save_file() {
+                    if let Err(err) = save_map(&path, &state.map) {
+                        eprintln!("Failed to save map: {err:?}");
+                    } else {
+                        state.current_file_path = Some(path);
+                    }
+                }
             }
-            if ui.button("Load").clicked() {
-                if let Ok(m) = load_map("map.json") {
-                    state.map = m;
-                    state.map_dirty = true;
+            if ui.button("Load…").clicked() {
+                let mut dialog = FileDialog::new();
+                if let Some(path) = state.current_file_path.as_ref() {
+                    if let Some(parent) = path.parent() {
+                        dialog = dialog.set_directory(parent);
+                    }
+                }
+
+                if let Some(path) = dialog.pick_file() {
+                    match load_map(&path) {
+                        Ok(m) => {
+                            state.map = m;
+                            state.map_dirty = true;
+                            state.current_file_path = Some(path);
+                        }
+                        Err(err) => {
+                            eprintln!("Failed to load map: {err:?}");
+                        }
+                    }
                 }
             }
 
@@ -129,6 +161,10 @@ fn ui_panel(
                     }
                 });
             });
+        }
+        if let Some(path) = state.current_file_path.as_ref() {
+            ui.separator();
+            ui.label(format!("Current map: {}", path.display()));
         }
     });
 }

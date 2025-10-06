@@ -5,6 +5,7 @@ use crate::types::*;
 use bevy::pbr::MaterialMeshBundle;
 use bevy::prelude::*;
 use bevy_egui::EguiContexts;
+use std::path::PathBuf;
 
 pub struct EditorPlugin;
 impl Plugin for EditorPlugin {
@@ -50,6 +51,7 @@ pub struct EditorState {
     pub map: TileMap,
     pub map_dirty: bool,
     pub show_grid: bool,
+    pub current_file_path: Option<PathBuf>,
 }
 impl Default for EditorState {
     fn default() -> Self {
@@ -62,6 +64,7 @@ impl Default for EditorState {
             map: TileMap::new(64, 64),
             map_dirty: true,
             show_grid: true,
+            current_file_path: None,
         }
     }
 }
