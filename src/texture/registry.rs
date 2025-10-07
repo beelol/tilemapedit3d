@@ -17,6 +17,10 @@ pub struct TerrainTextureEntry {
     pub normal: Option<Handle<Image>>,
     pub roughness: Option<Handle<Image>>,
     pub dispersion: Option<Handle<Image>>,
+    pub diffuse_path: String,
+    pub normal_path: Option<String>,
+    pub roughness_path: Option<String>,
+    pub dispersion_path: Option<String>,
 }
 
 #[derive(Resource, Default)]
@@ -76,6 +80,10 @@ impl TerrainTextureRegistry {
             normal: normal_handle,
             roughness: roughness_handle,
             dispersion: dispersion_handle,
+            diffuse_path: base_color.to_string(),
+            normal_path: normal.map(|s| s.to_string()),
+            roughness_path: roughness.map(|s| s.to_string()),
+            dispersion_path: dispersion.map(|s| s.to_string()),
         });
 
         material
