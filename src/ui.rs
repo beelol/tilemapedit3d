@@ -1,10 +1,14 @@
-use crate::editor::EditorTool;
+use crate::editor::{EditorTool, ExportStatus};
+use crate::export;
 use crate::io::{load_map, save_map};
+use crate::runtime::RuntimeSplatMap;
 use crate::types::*;
 use bevy::prelude::*;
-use bevy::tasks::{block_on, IoTaskPool};
-use bevy_egui::{egui, EguiContexts};
+use bevy::render::texture::Image;
+use bevy::tasks::{IoTaskPool, block_on};
+use bevy_egui::{EguiContexts, egui};
 use rfd::AsyncFileDialog;
+use std::path::{Path, PathBuf};
 
 use crate::texture::registry::TerrainTextureRegistry;
 
@@ -19,6 +23,8 @@ fn ui_panel(
     mut egui_ctx: EguiContexts,
     mut state: ResMut<crate::editor::EditorState>,
     textures: Res<TerrainTextureRegistry>,
+    runtime_splat: Option<Res<RuntimeSplatMap>>,
+    images: Res<Assets<Image>>,
 ) {
     let palette_items: Vec<_> = textures
         .iter()
@@ -74,6 +80,30 @@ fn ui_panel(
                 }
 
                 state.save_dialog_task = Some(IoTaskPool::get().spawn(async move {
+                    dialog
+                        .save_file()
+                        .await
+                        .map(|file| file.path().to_path_buf())
+                }));
+            }
+            if ui.button("Export…").clicked()
+                && state.export_dialog_task.is_none()
+                && state.export_task.is_none()
+            {
+                let mut dialog = AsyncFileDialog::new().set_title("Export Map");
+                dialog = dialog.add_filter("Tile Map Package", &["tmemapdata"]);
+                if let Some(path) = state.current_file_path.as_ref() {
+                    if let Some(parent) = path.parent() {
+                        dialog = dialog.set_directory(parent);
+                    }
+                    if let Some(stem) = path.file_stem().and_then(|name| name.to_str()) {
+                        dialog = dialog.set_file_name(format!("{stem}.tmemapdata"));
+                    }
+                } else {
+                    dialog = dialog.set_file_name("map.tmemapdata");
+                }
+
+                state.export_dialog_task = Some(IoTaskPool::get().spawn(async move {
                     dialog
                         .save_file()
                         .await
@@ -160,6 +190,18 @@ fn ui_panel(
             ui.separator();
             ui.label(format!("Current map: {}", path.display()));
         }
+
+        if let Some(status) = state.last_export_status.as_ref() {
+            ui.separator();
+            match status {
+                ExportStatus::Success(message) => {
+                    ui.colored_label(egui::Color32::from_rgb(56, 142, 60), message);
+                }
+                ExportStatus::Failure(message) => {
+                    ui.colored_label(egui::Color32::from_rgb(198, 40, 40), message);
+                }
+            }
+        }
     });
 
     if let Some(task) = state.save_dialog_task.as_mut() {
@@ -169,6 +211,74 @@ fn ui_panel(
                     eprintln!("Failed to save map: {err:?}");
                 } else {
                     state.current_file_path = Some(path);
+                }
+            }
+        }
+    }
+
+    if let Some(task) = state.export_dialog_task.as_mut() {
+        if task.is_finished() {
+            if let Some(path) = block_on(state.export_dialog_task.take().unwrap()) {
+                let export_path = ensure_extension(path, "tmemapdata");
+                match export::collect_texture_descriptors(&state.map, textures.as_ref()) {
+                    Ok(descriptors) => {
+                        let map_clone = state.map.clone();
+                        let export_name = infer_export_name(&state, &export_path);
+                        let export_path_clone = export_path.clone();
+                        let splat_png_result = if let Some(runtime) = runtime_splat.as_ref() {
+                            if let Some(image) = images.get(&runtime.handle) {
+                                export::encode_splatmap_png(image)
+                            } else {
+                                export::build_map_splatmap_png(&map_clone)
+                            }
+                        } else {
+                            export::build_map_splatmap_png(&map_clone)
+                        };
+
+                        match splat_png_result {
+                            Ok(splat_png) => {
+                                state.last_export_status = None;
+                                state.export_task = Some(IoTaskPool::get().spawn(async move {
+                                    export::export_package(
+                                        &export_path_clone,
+                                        map_clone,
+                                        export_name,
+                                        descriptors,
+                                        splat_png,
+                                    )
+                                    .map(|_| export_path_clone)
+                                }));
+                            }
+                            Err(err) => {
+                                eprintln!("Failed to prepare splatmap for export: {err:?}");
+                                state.last_export_status =
+                                    Some(ExportStatus::Failure(format!("Export failed: {err}")));
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("Failed to gather textures for export: {err:?}");
+                        state.last_export_status =
+                            Some(ExportStatus::Failure(format!("Export failed: {err}")));
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(task) = state.export_task.as_mut() {
+        if task.is_finished() {
+            match block_on(state.export_task.take().unwrap()) {
+                Ok(path) => {
+                    state.last_export_status = Some(ExportStatus::Success(format!(
+                        "Exported map to {}",
+                        path.display()
+                    )));
+                }
+                Err(err) => {
+                    eprintln!("Failed to export map: {err:?}");
+                    state.last_export_status =
+                        Some(ExportStatus::Failure(format!("Export failed: {err}")));
                 }
             }
         }
@@ -196,4 +306,30 @@ struct PaletteItem {
     tile_type: TileType,
     name: String,
     texture: egui::TextureId,
+}
+
+fn ensure_extension(mut path: PathBuf, extension: &str) -> PathBuf {
+    let needs_extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| !ext.eq_ignore_ascii_case(extension))
+        .unwrap_or(true);
+    if needs_extension {
+        path.set_extension(extension);
+    }
+    path
+}
+
+fn infer_export_name(state: &crate::editor::EditorState, export_path: &Path) -> String {
+    if let Some(path) = state.current_file_path.as_ref() {
+        if let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) {
+            return stem.to_string();
+        }
+    }
+
+    export_path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .map(|stem| stem.to_string())
+        .unwrap_or_else(|| "Tile Map".to_string())
 }

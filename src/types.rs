@@ -66,6 +66,15 @@ impl TileType {
             TileType::Rock => 3,
         }
     }
+
+    pub fn identifier(self) -> &'static str {
+        match self {
+            TileType::Grass => "grass",
+            TileType::Dirt => "dirt",
+            TileType::Cliff => "cliff",
+            TileType::Rock => "rock",
+        }
+    }
 }
 
 impl Default for TileType {
@@ -85,7 +94,7 @@ pub struct Tile {
     pub ramp_direction: Option<RampDirection>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Encode, Decode)]
+#[derive(Serialize, Deserialize, Debug, Encode, Decode, Clone)]
 pub struct TileMap {
     pub width: u32,
     pub height: u32,

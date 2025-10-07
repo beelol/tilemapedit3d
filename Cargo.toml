@@ -12,3 +12,5 @@ anyhow = "1.0.100"
 bincode = "2.0.1"
 bytemuck = "1.23.2"  # or "ron" if you prefer
 rfd = "0.14"
+image = { version = "0.25", default-features = false, features = ["png"] }
+zip = { version = "0.6", default-features = false, features = ["deflate"] }

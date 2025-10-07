@@ -8,6 +8,11 @@ use bevy::tasks::Task;
 use bevy_egui::EguiContexts;
 use std::path::PathBuf;
 
+pub enum ExportStatus {
+    Success(String),
+    Failure(String),
+}
+
 pub struct EditorPlugin;
 impl Plugin for EditorPlugin {
     fn build(&self, app: &mut App) {
@@ -55,6 +60,9 @@ pub struct EditorState {
     pub current_file_path: Option<PathBuf>,
     pub save_dialog_task: Option<Task<Option<PathBuf>>>,
     pub load_dialog_task: Option<Task<Option<PathBuf>>>,
+    pub export_dialog_task: Option<Task<Option<PathBuf>>>,
+    pub export_task: Option<Task<anyhow::Result<PathBuf>>>,
+    pub last_export_status: Option<ExportStatus>,
 }
 impl Default for EditorState {
     fn default() -> Self {
@@ -70,6 +78,9 @@ impl Default for EditorState {
             current_file_path: None,
             save_dialog_task: None,
             load_dialog_task: None,
+            export_dialog_task: None,
+            export_task: None,
+            last_export_status: None,
         }
     }
 }
