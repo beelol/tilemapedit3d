@@ -1,8 +1,10 @@
 use crate::editor::{EditorTool, ExportStatus};
 use crate::export;
 use crate::io::{load_map, save_map};
+use crate::runtime::RuntimeSplatMap;
 use crate::types::*;
 use bevy::prelude::*;
+use bevy::render::texture::Image;
 use bevy::tasks::{IoTaskPool, block_on};
 use bevy_egui::{EguiContexts, egui};
 use rfd::AsyncFileDialog;
@@ -21,6 +23,8 @@ fn ui_panel(
     mut egui_ctx: EguiContexts,
     mut state: ResMut<crate::editor::EditorState>,
     textures: Res<TerrainTextureRegistry>,
+    runtime_splat: Option<Res<RuntimeSplatMap>>,
+    images: Res<Assets<Image>>,
 ) {
     let palette_items: Vec<_> = textures
         .iter()
@@ -221,16 +225,36 @@ fn ui_panel(
                         let map_clone = state.map.clone();
                         let export_name = infer_export_name(&state, &export_path);
                         let export_path_clone = export_path.clone();
-                        state.last_export_status = None;
-                        state.export_task = Some(IoTaskPool::get().spawn(async move {
-                            export::export_package(
-                                &export_path_clone,
-                                map_clone,
-                                export_name,
-                                descriptors,
-                            )
-                            .map(|_| export_path_clone)
-                        }));
+                        let splat_png_result = if let Some(runtime) = runtime_splat.as_ref() {
+                            if let Some(image) = images.get(&runtime.handle) {
+                                export::encode_splatmap_png(image)
+                            } else {
+                                export::build_map_splatmap_png(&map_clone)
+                            }
+                        } else {
+                            export::build_map_splatmap_png(&map_clone)
+                        };
+
+                        match splat_png_result {
+                            Ok(splat_png) => {
+                                state.last_export_status = None;
+                                state.export_task = Some(IoTaskPool::get().spawn(async move {
+                                    export::export_package(
+                                        &export_path_clone,
+                                        map_clone,
+                                        export_name,
+                                        descriptors,
+                                        splat_png,
+                                    )
+                                    .map(|_| export_path_clone)
+                                }));
+                            }
+                            Err(err) => {
+                                eprintln!("Failed to prepare splatmap for export: {err:?}");
+                                state.last_export_status =
+                                    Some(ExportStatus::Failure(format!("Export failed: {err}")));
+                            }
+                        }
                     }
                     Err(err) => {
                         eprintln!("Failed to gather textures for export: {err:?}");

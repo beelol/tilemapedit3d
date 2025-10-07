@@ -115,6 +115,7 @@ pub fn export_package(
     map: TileMap,
     map_name: String,
     textures: Vec<TextureExportDescriptor>,
+    splat_png: Vec<u8>,
 ) -> Result<()> {
     if let Some(parent) = output_path.parent() {
         if !parent.as_os_str().is_empty() {
@@ -126,9 +127,6 @@ pub fn export_package(
 
     let mesh = terrain::build_combined_mesh(&map);
     let mesh_bytes = mesh_to_glb(&mesh)?;
-
-    let splat_image = splatmap::create(&map);
-    let splat_png = encode_splatmap_png(&splat_image)?;
 
     let tilemap_json = serde_json::to_vec_pretty(&map)?;
 
@@ -273,7 +271,7 @@ fn resolve_asset_path(path: &str) -> Result<PathBuf> {
     Ok(resolved)
 }
 
-fn encode_splatmap_png(image: &Image) -> Result<Vec<u8>> {
+pub fn encode_splatmap_png(image: &Image) -> Result<Vec<u8>> {
     ensure!(
         image.texture_descriptor.format == bevy::render::render_resource::TextureFormat::Rgba8Unorm,
         "Splatmap must be RGBA8 format for export"
@@ -287,6 +285,11 @@ fn encode_splatmap_png(image: &Image) -> Result<Vec<u8>> {
         encoder.encode(&image.data, width, height, ColorType::Rgba8)?;
     }
     Ok(buffer)
+}
+
+pub fn build_map_splatmap_png(map: &TileMap) -> Result<Vec<u8>> {
+    let image = splatmap::create(map);
+    encode_splatmap_png(&image)
 }
 
 fn mesh_to_glb(mesh: &Mesh) -> Result<Vec<u8>> {
