@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use bevy::render::mesh::{Indices, Mesh, VertexAttributeValues};
 use bevy::render::texture::Image;
-use image::ColorType;
+use image::{ColorType, ExtendedColorType, ImageEncoder};
 use image::codecs::png::PngEncoder;
 use serde::Serialize;
 use serde_json::json;
@@ -282,7 +282,7 @@ pub fn encode_splatmap_png(image: &Image) -> Result<Vec<u8>> {
     let mut buffer = Vec::new();
     {
         let mut encoder = PngEncoder::new(&mut buffer);
-        encoder.encode(&image.data, width, height, ColorType::Rgba8)?;
+        encoder.write_image(&image.data, width, height, ExtendedColorType::Rgba8)?;
     }
     Ok(buffer)
 }
