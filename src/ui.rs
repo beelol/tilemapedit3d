@@ -2,6 +2,7 @@ use crate::editor::{EditorTool, ExportStatus};
 use crate::export;
 use crate::io::{load_map, save_map};
 use crate::runtime::RuntimeSplatMap;
+use crate::terrain::TerrainMeshSet;
 use crate::types::*;
 use bevy::prelude::*;
 use bevy::render::texture::Image;
@@ -15,7 +16,7 @@ use crate::texture::registry::TerrainTextureRegistry;
 pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, ui_panel);
+        app.add_systems(Update, ui_panel.before(TerrainMeshSet::Rebuild));
     }
 }
 
