@@ -79,7 +79,7 @@ impl TileType {
 
 impl Default for TileType {
     fn default() -> Self {
-        TileType::Rock
+        TileType::Grass
     }
 }
 
