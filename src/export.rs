@@ -615,3 +615,40 @@ fn bounds_vec3(values: &[[f32; 3]]) -> ([f32; 3], [f32; 3]) {
     }
     (min, max)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::render::render_resource::{PrimitiveTopology, RenderAssetUsages};
+
+    #[test]
+    fn mesh_to_glb_includes_vertex_colors_when_present() {
+        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vec![[0.0, 0.0, 0.0]; 3]);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 1.0, 0.0]; 3]);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0, 0.0]; 3]);
+        mesh.insert_attribute(
+            Mesh::ATTRIBUTE_COLOR,
+            vec![[1.0, 0.5, 0.25, 1.0]; 3],
+        );
+        mesh.insert_indices(Indices::U32(vec![0, 1, 2]));
+
+        let glb_bytes = mesh_to_glb(&mesh).expect("mesh should serialize to glb");
+
+        let json_length = u32::from_le_bytes(glb_bytes[12..16].try_into().unwrap()) as usize;
+        let chunk_type = u32::from_le_bytes(glb_bytes[16..20].try_into().unwrap());
+        assert_eq!(chunk_type, 0x4E4F534A, "first GLB chunk must be JSON");
+
+        let json_slice = &glb_bytes[20..20 + json_length];
+        let json_str = std::str::from_utf8(json_slice)
+            .expect("valid UTF-8 JSON chunk")
+            .trim_end();
+        let root: serde_json::Value = serde_json::from_str(json_str).expect("valid JSON");
+
+        let attributes = &root["meshes"][0]["primitives"][0]["attributes"];
+        assert!(
+            attributes.get("COLOR_0").is_some(),
+            "exported mesh should reference vertex colors"
+        );
+    }
+}
