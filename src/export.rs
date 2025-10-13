@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use bevy::render::mesh::{Indices, Mesh, VertexAttributeValues};
 use bevy::render::texture::Image;
-use image::{ColorType, ExtendedColorType, ImageEncoder};
 use image::codecs::png::PngEncoder;
+use image::{ColorType, ExtendedColorType, ImageEncoder};
 use serde::Serialize;
 use serde_json::json;
 use zip::CompressionMethod;
@@ -44,6 +44,7 @@ struct MetadataTextureEntry {
     normal: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     roughness: Option<String>,
+    splatmap_channel: usize,
 }
 
 #[derive(Serialize)]
@@ -207,6 +208,7 @@ fn build_metadata_and_files(
             diffuse: diffuse_path,
             normal: None,
             roughness: None,
+            splatmap_channel: descriptor.tile_type.as_index(),
         };
 
         if let Some(normal) = &descriptor.normal {
