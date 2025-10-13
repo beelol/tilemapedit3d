@@ -58,6 +58,8 @@ struct ExportMetadata {
     mesh: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     tilemap: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    wall_diffuse: Option<String>,
 }
 
 pub fn collect_texture_descriptors(
@@ -67,6 +69,8 @@ pub fn collect_texture_descriptors(
     use std::collections::HashSet;
 
     let mut used: HashSet<TileType> = HashSet::new();
+    // Always include the cliff texture so wall rendering assets are exported
+    used.insert(TileType::Cliff);
     for tile in &map.tiles {
         used.insert(tile.tile_type);
     }
@@ -131,7 +135,7 @@ pub fn export_package(
 
     let tilemap_json = serde_json::to_vec_pretty(&map)?;
 
-    let (metadata, texture_files) = build_metadata_and_files(&textures)?;
+    let (metadata, texture_files, wall_diffuse) = build_metadata_and_files(&textures)?;
     let metadata = ExportMetadata {
         name: map_name,
         width: map.width,
@@ -141,6 +145,7 @@ pub fn export_package(
         splatmap: "splatmap.png".to_string(),
         mesh: "mesh.glb".to_string(),
         tilemap: Some("tilemap.json".to_string()),
+        wall_diffuse,
     };
     let metadata_json = serde_json::to_vec_pretty(&metadata)?;
 
@@ -176,9 +181,14 @@ pub fn export_package(
 
 fn build_metadata_and_files(
     textures: &[TextureExportDescriptor],
-) -> Result<(Vec<MetadataTextureEntry>, Vec<(String, Vec<u8>)>)> {
+) -> Result<(
+    Vec<MetadataTextureEntry>,
+    Vec<(String, Vec<u8>)>,
+    Option<String>,
+)> {
     let mut metadata = Vec::new();
     let mut files = Vec::new();
+    let mut wall_diffuse = None;
 
     for descriptor in textures {
         ensure!(
@@ -202,6 +212,10 @@ fn build_metadata_and_files(
             )
         })?;
         files.push((diffuse_path.clone(), diffuse_bytes));
+
+        if descriptor.tile_type == TileType::Cliff && wall_diffuse.is_none() {
+            wall_diffuse = Some(diffuse_path.clone());
+        }
 
         let mut entry = MetadataTextureEntry {
             id: descriptor.identifier.clone(),
@@ -242,7 +256,7 @@ fn build_metadata_and_files(
         metadata.push(entry);
     }
 
-    Ok((metadata, files))
+    Ok((metadata, files, wall_diffuse))
 }
 
 fn texture_target_path(id: &str, kind: &str, source: &Path) -> String {
