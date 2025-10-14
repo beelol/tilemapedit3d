@@ -527,6 +527,8 @@ fn fragment(
         }
 #endif
 
+        let cliff_weight = max(1.0 - top_blend - bottom_blend, 0.0);
+
 #ifdef TERRAIN_MATERIAL_EXTENSION_BASE_COLOR_ARRAY
         let cliff_sample = triplanar_sample_layer(
             terrain_base_color_array,
@@ -536,7 +538,6 @@ fn fragment(
             scale,
             cliff_layer,
         );
-        let cliff_weight = max(1.0 - top_blend - bottom_blend, 0.0);
         var color_accum = vec3<f32>(0.0);
         var color_weight = 0.0;
 
@@ -587,7 +588,6 @@ fn fragment(
             scale,
             cliff_layer,
         );
-        let cliff_weight = max(1.0 - top_blend - bottom_blend, 0.0);
         var normal_accum = vec3<f32>(0.0);
         var normal_weight = 0.0;
 
@@ -641,7 +641,6 @@ fn fragment(
             scale,
             cliff_layer,
         );
-        let cliff_weight = max(1.0 - top_blend - bottom_blend, 0.0);
         var roughness_accum = 0.0;
         var roughness_weight = 0.0;
 
