@@ -131,9 +131,11 @@ impl TerrainTextureRegistry {
         normal: Option<&str>,
         roughness: Option<&str>,
     ) {
-        let base_color_handle: Handle<Image> = asset_server.load(base_color);
-        let normal_handle: Option<Handle<Image>> = normal.map(|path| asset_server.load(path));
-        let roughness_handle: Option<Handle<Image>> = roughness.map(|path| asset_server.load(path));
+        let base_color_handle: Handle<Image> = asset_server.load(base_color.to_string());
+        let normal_handle: Option<Handle<Image>> =
+            normal.map(|path| asset_server.load(path.to_string()));
+        let roughness_handle: Option<Handle<Image>> =
+            roughness.map(|path| asset_server.load(path.to_string()));
 
         self.register_wall_texture(WallTextureEntry {
             id: id.into(),
