@@ -172,13 +172,26 @@ fn append_tile_geometry(
         let bottom_height = bottom_a_y.max(bottom_b_y);
         [layer, bottom_height, 0.0, 0.0]
     });
+    let north_bottom_a = Vec3::new(x0, bnw.min(nw.y), z0);
+    let north_bottom_b = Vec3::new(x1, bne.min(ne.y), z0);
+    let north_layer = side_tile_layer(
+        map,
+        x,
+        y,
+        RampDirection::North,
+        tile_layer,
+        nw,
+        ne,
+        north_bottom_a,
+        north_bottom_b,
+    );
     buffer.add_side_face(
         nw,
         ne,
-        Vec3::new(x0, bnw.min(nw.y), z0),
-        Vec3::new(x1, bne.min(ne.y), z0),
+        north_bottom_a,
+        north_bottom_b,
         RampDirection::North,
-        tile_layer,
+        north_layer,
         nw.y.max(ne.y),
         north_bottom_info,
     );
@@ -200,13 +213,26 @@ fn append_tile_geometry(
         let bottom_height = bottom_a_y.max(bottom_b_y);
         [layer, bottom_height, 0.0, 0.0]
     });
+    let south_bottom_a = Vec3::new(x1, bse.min(se.y), z1);
+    let south_bottom_b = Vec3::new(x0, bsw.min(sw.y), z1);
+    let south_layer = side_tile_layer(
+        map,
+        x,
+        y,
+        RampDirection::South,
+        tile_layer,
+        se,
+        sw,
+        south_bottom_a,
+        south_bottom_b,
+    );
     buffer.add_side_face(
         se,
         sw,
-        Vec3::new(x1, bse.min(se.y), z1),
-        Vec3::new(x0, bsw.min(sw.y), z1),
+        south_bottom_a,
+        south_bottom_b,
         RampDirection::South,
-        tile_layer,
+        south_layer,
         se.y.max(sw.y),
         south_bottom_info,
     );
@@ -228,13 +254,26 @@ fn append_tile_geometry(
         let bottom_height = bottom_a_y.max(bottom_b_y);
         [layer, bottom_height, 0.0, 0.0]
     });
+    let west_bottom_a = Vec3::new(x0, bsw.min(sw.y), z1);
+    let west_bottom_b = Vec3::new(x0, bnw.min(nw.y), z0);
+    let west_layer = side_tile_layer(
+        map,
+        x,
+        y,
+        RampDirection::West,
+        tile_layer,
+        sw,
+        nw,
+        west_bottom_a,
+        west_bottom_b,
+    );
     buffer.add_side_face(
         sw,
         nw,
-        Vec3::new(x0, bsw.min(sw.y), z1),
-        Vec3::new(x0, bnw.min(nw.y), z0),
+        west_bottom_a,
+        west_bottom_b,
         RampDirection::West,
-        tile_layer,
+        west_layer,
         sw.y.max(nw.y),
         west_bottom_info,
     );
@@ -256,16 +295,80 @@ fn append_tile_geometry(
         let bottom_height = bottom_a_y.max(bottom_b_y);
         [layer, bottom_height, 0.0, 0.0]
     });
+    let east_bottom_a = Vec3::new(x1, bne.min(ne.y), z0);
+    let east_bottom_b = Vec3::new(x1, bse.min(se.y), z1);
+    let east_layer = side_tile_layer(
+        map,
+        x,
+        y,
+        RampDirection::East,
+        tile_layer,
+        ne,
+        se,
+        east_bottom_a,
+        east_bottom_b,
+    );
     buffer.add_side_face(
         ne,
         se,
-        Vec3::new(x1, bne.min(ne.y), z0),
-        Vec3::new(x1, bse.min(se.y), z1),
+        east_bottom_a,
+        east_bottom_b,
         RampDirection::East,
-        tile_layer,
+        east_layer,
         ne.y.max(se.y),
         east_bottom_info,
     );
+}
+
+fn side_tile_layer(
+    map: &TileMap,
+    x: u32,
+    y: u32,
+    direction: RampDirection,
+    default_layer: Option<f32>,
+    top_a: Vec3,
+    top_b: Vec3,
+    bottom_a: Vec3,
+    bottom_b: Vec3,
+) -> Option<f32> {
+    if default_layer.is_none() {
+        return None;
+    }
+
+    if !has_vertical_face(top_a, top_b, bottom_a, bottom_b) {
+        return default_layer;
+    }
+
+    if should_force_cliff(map, x, y, direction) {
+        Some(TileType::Cliff.as_index() as f32)
+    } else {
+        default_layer
+    }
+}
+
+fn has_vertical_face(top_a: Vec3, top_b: Vec3, bottom_a: Vec3, bottom_b: Vec3) -> bool {
+    const EPS: f32 = 1e-4;
+    (top_a.y - bottom_a.y).abs() > EPS || (top_b.y - bottom_b.y).abs() > EPS
+}
+
+fn should_force_cliff(map: &TileMap, x: u32, y: u32, direction: RampDirection) -> bool {
+    if map.get(x, y).kind == TileKind::Ramp {
+        return true;
+    }
+
+    let (dx, dy) = direction.offset();
+    let nx = x as i32 + dx;
+    let ny = y as i32 + dy;
+    if nx < 0 || ny < 0 {
+        return false;
+    }
+
+    let (ux, uy) = (nx as u32, ny as u32);
+    if ux >= map.width || uy >= map.height {
+        return false;
+    }
+
+    map.get(ux, uy).kind == TileKind::Ramp
 }
 
 fn find_ramp_target(map: &TileMap, x: u32, y: u32, base: f32) -> Option<(RampDirection, f32)> {
