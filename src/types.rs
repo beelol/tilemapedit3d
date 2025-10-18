@@ -46,7 +46,8 @@ impl RampDirection {
 pub enum TileType {
     Grass,
     Dirt,
-    Cliff,
+    #[serde(alias = "Cliff")]
+    Sand,
     Rock,
 }
 
@@ -54,7 +55,7 @@ impl TileType {
     pub const ALL: [TileType; 4] = [
         TileType::Grass,
         TileType::Dirt,
-        TileType::Cliff,
+        TileType::Sand,
         TileType::Rock,
     ];
 
@@ -62,7 +63,7 @@ impl TileType {
         match self {
             TileType::Grass => 0,
             TileType::Dirt => 1,
-            TileType::Cliff => 2,
+            TileType::Sand => 2,
             TileType::Rock => 3,
         }
     }
@@ -71,7 +72,7 @@ impl TileType {
         match self {
             TileType::Grass => "grass",
             TileType::Dirt => "dirt",
-            TileType::Cliff => "cliff",
+            TileType::Sand => "sand",
             TileType::Rock => "rock",
         }
     }

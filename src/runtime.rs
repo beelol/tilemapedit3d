@@ -96,7 +96,7 @@ fn rebuild_runtime_mesh(
 
 fn generate_splat_map(
     state: Res<EditorState>,
-    mut runtime_splat: Option<ResMut<RuntimeSplatMap>>,
+    runtime_splat: Option<ResMut<RuntimeSplatMap>>,
     mut images: ResMut<Assets<Image>>,
 ) {
     if !state.map_dirty {
@@ -166,6 +166,33 @@ fn update_runtime_material(
                 );
             }
         }
+
+        if let Some(wall) = registry.wall_texture() {
+            waiting_for_textures |= check_image_handle_state(
+                &asset_server,
+                wall.base_color.id(),
+                &mut encountered_failure,
+                "Wall base color texture failed to load",
+            );
+
+            if let Some(normal) = wall.normal.as_ref() {
+                waiting_for_textures |= check_image_handle_state(
+                    &asset_server,
+                    normal.id(),
+                    &mut encountered_failure,
+                    "Wall normal map failed to load",
+                );
+            }
+
+            if let Some(roughness) = wall.roughness.as_ref() {
+                waiting_for_textures |= check_image_handle_state(
+                    &asset_server,
+                    roughness.id(),
+                    &mut encountered_failure,
+                    "Wall roughness map failed to load",
+                );
+            }
+        }
     }
 
     if encountered_failure {
@@ -188,16 +215,14 @@ fn update_runtime_material(
         return;
     };
 
-    let Some((base_handle, normal_handle, roughness_handle)) =
-        textures.ensure_texture_arrays(&mut images)
-    else {
+    let Some(arrays) = textures.ensure_texture_arrays(&mut images) else {
         error!("Failed to assemble terrain texture arrays after previews loaded");
         *visibility = Visibility::Hidden;
         return;
     };
 
     let desired_layers = images
-        .get(&base_handle)
+        .get(&arrays.base_color)
         .map(|image| image.texture_descriptor.size.depth_or_array_layers)
         .unwrap_or(0);
 
@@ -206,21 +231,26 @@ fn update_runtime_material(
         return;
     }
 
-    if material.extension.params.layer_count != desired_layers {
-        material.extension.params.layer_count = desired_layers;
+    let floor_layers = arrays
+        .wall_layer_index
+        .map(|_| desired_layers.saturating_sub(1))
+        .unwrap_or(desired_layers);
+
+    if material.extension.params.layer_count != floor_layers {
+        material.extension.params.layer_count = floor_layers;
     }
 
     if material
         .extension
         .base_color_array
         .as_ref()
-        .map(|handle| handle != &base_handle)
+        .map(|handle| handle != &arrays.base_color)
         .unwrap_or(true)
     {
-        material.extension.base_color_array = Some(base_handle.clone());
+        material.extension.base_color_array = Some(arrays.base_color.clone());
     }
 
-    match normal_handle {
+    match arrays.normal.clone() {
         Some(handle) => {
             if material
                 .extension
@@ -237,7 +267,7 @@ fn update_runtime_material(
         }
     }
 
-    match roughness_handle {
+    match arrays.roughness.clone() {
         Some(handle) => {
             if material
                 .extension
@@ -267,6 +297,10 @@ fn update_runtime_material(
     material.extension.params.map_size = Vec2::new(splat.size.x as f32, splat.size.y as f32);
     material.extension.params.tile_size = TILE_SIZE;
     material.extension.params.cliff_blend_height = 0.2;
+    material.extension.params.wall_enabled = arrays.wall_layer_index.map(|_| 1u32).unwrap_or(0);
+    material.extension.params.wall_layer_index = arrays.wall_layer_index.unwrap_or(u32::MAX);
+    material.extension.params.wall_has_normal = if arrays.wall_has_normal { 1 } else { 0 };
+    material.extension.params.wall_has_roughness = if arrays.wall_has_roughness { 1 } else { 0 };
 
     *visibility = Visibility::Visible;
 }
@@ -282,6 +316,23 @@ fn check_handle_state(
         Some(LoadState::Loaded) => false,
         Some(LoadState::Failed(_)) => {
             error!(tile_type = ?tile_type, message);
+            *encountered_failure = true;
+            false
+        }
+        _ => true,
+    }
+}
+
+fn check_image_handle_state(
+    asset_server: &AssetServer,
+    id: AssetId<Image>,
+    encountered_failure: &mut bool,
+    message: &str,
+) -> bool {
+    match asset_server.get_load_state(id) {
+        Some(LoadState::Loaded) => false,
+        Some(LoadState::Failed(_)) => {
+            error!("{message}");
             *encountered_failure = true;
             false
         }

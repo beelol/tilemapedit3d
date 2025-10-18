@@ -136,8 +136,8 @@ fn spawn_editor_assets(
             Some("textures/terrain/rocky_terrain_02_disp_1k.png"),
         ),
         (
-            TileType::Cliff,
-            "Cliff Rock",
+            TileType::Sand,
+            "Sandstone",
             "textures/terrain/rock/aerial_ground_rock_diff_1k.png",
             Some("textures/terrain/rock/aerial_ground_rock_nor_gl_1k_fixed.exr"),
             Some("textures/terrain/rock/roughness_in_G.png"),
@@ -165,6 +165,15 @@ fn spawn_editor_assets(
             dispersion,
         );
     }
+
+    textures.load_and_register_wall(
+        "wall",
+        "Cliff Wall",
+        &asset_server,
+        "textures/terrain/rock/aerial_ground_rock_diff_1k.png",
+        Some("textures/terrain/rock/aerial_ground_rock_nor_gl_1k_fixed.exr"),
+        Some("textures/terrain/rock/roughness_in_G.png"),
+    );
 
     let mut visual = TerrainVisual::default();
 

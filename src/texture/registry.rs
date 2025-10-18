@@ -23,6 +23,18 @@ pub struct TerrainTextureEntry {
     pub dispersion_path: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct WallTextureEntry {
+    pub id: String,
+    pub name: String,
+    pub base_color: Handle<Image>,
+    pub normal: Option<Handle<Image>>,
+    pub roughness: Option<Handle<Image>>,
+    pub diffuse_path: String,
+    pub normal_path: Option<String>,
+    pub roughness_path: Option<String>,
+}
+
 #[derive(Resource, Default)]
 pub struct TerrainTextureRegistry {
     entries: Vec<TerrainTextureEntry>,
@@ -30,6 +42,10 @@ pub struct TerrainTextureRegistry {
     base_color_array: Option<Handle<Image>>,
     normal_array: Option<Handle<Image>>,
     roughness_array: Option<Handle<Image>>,
+    wall_texture: Option<WallTextureEntry>,
+    wall_layer_index: Option<u32>,
+    wall_normal_available: bool,
+    wall_roughness_available: bool,
 }
 
 impl TerrainTextureRegistry {
@@ -44,6 +60,19 @@ impl TerrainTextureRegistry {
         self.base_color_array = None;
         self.normal_array = None;
         self.roughness_array = None;
+        self.wall_layer_index = None;
+        self.wall_normal_available = false;
+        self.wall_roughness_available = false;
+    }
+
+    pub fn register_wall_texture(&mut self, entry: WallTextureEntry) {
+        self.wall_texture = Some(entry);
+        self.base_color_array = None;
+        self.normal_array = None;
+        self.roughness_array = None;
+        self.wall_layer_index = None;
+        self.wall_normal_available = false;
+        self.wall_roughness_available = false;
     }
 
     pub fn load_and_register(
@@ -99,86 +128,188 @@ impl TerrainTextureRegistry {
             .and_then(|index| self.entries.get(*index))
     }
 
+    pub fn load_and_register_wall(
+        &mut self,
+        id: impl Into<String>,
+        name: impl Into<String>,
+        asset_server: &AssetServer,
+        base_color: &str,
+        normal: Option<&str>,
+        roughness: Option<&str>,
+    ) {
+        let base_color_handle: Handle<Image> = asset_server.load(base_color.to_string());
+        let normal_handle: Option<Handle<Image>> =
+            normal.map(|path| asset_server.load(path.to_string()));
+        let roughness_handle: Option<Handle<Image>> =
+            roughness.map(|path| asset_server.load(path.to_string()));
+
+        self.register_wall_texture(WallTextureEntry {
+            id: id.into(),
+            name: name.into(),
+            base_color: base_color_handle,
+            normal: normal_handle,
+            roughness: roughness_handle,
+            diffuse_path: base_color.to_string(),
+            normal_path: normal.map(|s| s.to_string()),
+            roughness_path: roughness.map(|s| s.to_string()),
+        });
+    }
+
+    pub fn wall_texture(&self) -> Option<&WallTextureEntry> {
+        self.wall_texture.as_ref()
+    }
+
     pub fn ensure_texture_arrays(
         &mut self,
         images: &mut Assets<Image>,
-    ) -> Option<(Handle<Image>, Option<Handle<Image>>, Option<Handle<Image>>)> {
-        let base_color = ensure_base_color_array(
-            &self.entries,
-            &self.lookup,
-            images,
-            &mut self.base_color_array,
-        )?;
+    ) -> Option<TerrainTextureArrays> {
+        if let (Some(base), normal, roughness, Some(layer_index)) = (
+            self.base_color_array.clone(),
+            self.normal_array.clone(),
+            self.roughness_array.clone(),
+            self.wall_layer_index,
+        ) {
+            if images.get(&base).is_some()
+                && normal
+                    .as_ref()
+                    .map(|handle| images.get(handle).is_some())
+                    .unwrap_or(true)
+                && roughness
+                    .as_ref()
+                    .map(|handle| images.get(handle).is_some())
+                    .unwrap_or(true)
+            {
+                return Some(TerrainTextureArrays {
+                    base_color: base,
+                    normal,
+                    roughness,
+                    wall_layer_index: Some(layer_index),
+                    wall_has_normal: self.wall_normal_available,
+                    wall_has_roughness: self.wall_roughness_available,
+                });
+            }
+        }
 
-        let normal = ensure_optional_array(
+        if let (Some(base), normal, roughness, None) = (
+            self.base_color_array.clone(),
+            self.normal_array.clone(),
+            self.roughness_array.clone(),
+            self.wall_layer_index,
+        ) {
+            if images.get(&base).is_some()
+                && normal
+                    .as_ref()
+                    .map(|handle| images.get(handle).is_some())
+                    .unwrap_or(true)
+                && roughness
+                    .as_ref()
+                    .map(|handle| images.get(handle).is_some())
+                    .unwrap_or(true)
+            {
+                return Some(TerrainTextureArrays {
+                    base_color: base,
+                    normal,
+                    roughness,
+                    wall_layer_index: None,
+                    wall_has_normal: false,
+                    wall_has_roughness: false,
+                });
+            }
+        }
+
+        self.base_color_array = None;
+        self.normal_array = None;
+        self.roughness_array = None;
+        self.wall_layer_index = None;
+        self.wall_normal_available = false;
+        self.wall_roughness_available = false;
+
+        let mut base_layers: Vec<&Image> = Vec::with_capacity(
+            TileType::ALL.len() + if self.wall_texture.is_some() { 1 } else { 0 },
+        );
+
+        for tile_type in TileType::ALL {
+            let entry_index = *self.lookup.get(&tile_type)?;
+            let entry = self.entries.get(entry_index)?;
+            let image = images.get(&entry.preview)?;
+            base_layers.push(image);
+        }
+
+        let mut wall_layer_index = None;
+        if let Some(wall) = self.wall_texture.as_ref() {
+            let image = images.get(&wall.base_color)?;
+            wall_layer_index = Some(base_layers.len() as u32);
+            base_layers.push(image);
+        }
+
+        let base_array = material::create_texture_array_image(&base_layers)?;
+        let base_handle = images.add(base_array);
+
+        let (normal_handle, wall_has_normal) = ensure_optional_array(
             &self.entries,
             &self.lookup,
             images,
-            &mut self.normal_array,
             |entry| entry.normal.as_ref(),
             [0.5, 0.5, 1.0, 1.0],
-        );
+            self.wall_texture.as_ref().map(|wall| ExtraLayer {
+                handle: wall.normal.as_ref(),
+            }),
+        )?;
 
-        let roughness = ensure_optional_array(
+        let (roughness_handle, wall_has_roughness) = ensure_optional_array(
             &self.entries,
             &self.lookup,
             images,
-            &mut self.roughness_array,
             |entry| entry.roughness.as_ref(),
             [1.0, 1.0, 1.0, 1.0],
-        );
+            self.wall_texture.as_ref().map(|wall| ExtraLayer {
+                handle: wall.roughness.as_ref(),
+            }),
+        )?;
 
-        Some((base_color, normal, roughness))
+        self.wall_layer_index = wall_layer_index;
+        self.wall_normal_available = wall_has_normal;
+        self.wall_roughness_available = wall_has_roughness;
+
+        self.base_color_array = Some(base_handle.clone());
+        self.normal_array = normal_handle.clone();
+        self.roughness_array = roughness_handle.clone();
+
+        Some(TerrainTextureArrays {
+            base_color: base_handle,
+            normal: normal_handle,
+            roughness: roughness_handle,
+            wall_layer_index,
+            wall_has_normal,
+            wall_has_roughness,
+        })
     }
 }
 
-fn ensure_base_color_array(
-    entries: &[TerrainTextureEntry],
-    lookup: &HashMap<TileType, usize>,
-    images: &mut Assets<Image>,
-    cache: &mut Option<Handle<Image>>,
-) -> Option<Handle<Image>> {
-    if let Some(handle) = cache.clone() {
-        if images.get(&handle).is_some() {
-            return Some(handle);
-        }
-        *cache = None;
-    }
+struct ExtraLayer<'a> {
+    handle: Option<&'a Handle<Image>>,
+}
 
-    let mut layers: Vec<&Image> = Vec::with_capacity(TileType::ALL.len());
-    for tile_type in TileType::ALL {
-        let entry_index = *lookup.get(&tile_type)?;
-        let entry = entries.get(entry_index)?;
-        let image = images.get(&entry.preview)?;
-        layers.push(image);
-    }
-
-    let array_image = material::create_texture_array_image(&layers)?;
-    let handle = images.add(array_image);
-    *cache = Some(handle.clone());
-    Some(handle)
+pub struct TerrainTextureArrays {
+    pub base_color: Handle<Image>,
+    pub normal: Option<Handle<Image>>,
+    pub roughness: Option<Handle<Image>>,
+    pub wall_layer_index: Option<u32>,
+    pub wall_has_normal: bool,
+    pub wall_has_roughness: bool,
 }
 
 fn ensure_optional_array<F>(
     entries: &[TerrainTextureEntry],
     lookup: &HashMap<TileType, usize>,
     images: &mut Assets<Image>,
-    cache: &mut Option<Handle<Image>>,
     accessor: F,
     fallback_color: [f32; 4],
-) -> Option<Handle<Image>>
+    extra_layer: Option<ExtraLayer<'_>>,
+) -> Option<(Option<Handle<Image>>, bool)>
 where
     F: Fn(&TerrainTextureEntry) -> Option<&Handle<Image>>,
 {
-    // check cache
-    if let Some(handle) = cache.clone() {
-        if images.get(&handle).is_some() {
-            return Some(handle);
-        }
-        *cache = None;
-    }
-
-    // early exit if no textures at all
     let mut has_texture = false;
     for tile_type in TileType::ALL {
         let entry_index = *lookup.get(&tile_type)?;
@@ -188,20 +319,37 @@ where
             break;
         }
     }
-    if !has_texture {
-        return None;
+    let extra_has_handle = extra_layer
+        .as_ref()
+        .and_then(|extra| extra.handle)
+        .is_some();
+
+    if !has_texture && !extra_has_handle {
+        return Some((None, false));
     }
 
-    // pick a template image for fallbacks
-    let Some(template_image) = find_template_image(entries, lookup, images, &accessor) else {
-        warn!("Skipping optional terrain texture array due to missing loaded source images");
-        return None;
+    let template_image = match find_template_image(entries, lookup, images, &accessor) {
+        Some(image) => image.clone(),
+        None => {
+            if let Some(extra) = &extra_layer {
+                if let Some(handle) = extra.handle {
+                    images.get(handle)?.clone()
+                } else {
+                    warn!("Skipping optional terrain texture array due to missing template image");
+                    return None;
+                }
+            } else {
+                warn!(
+                    "Skipping optional terrain texture array due to missing loaded source images"
+                );
+                return None;
+            }
+        }
     };
-    // Clone the template image to avoid borrowing conflicts
-    let template_image_clone = template_image.clone();
 
     // --- pass 1: resolve handles (may mutate images) ---
-    let mut handles: Vec<Handle<Image>> = Vec::with_capacity(TileType::ALL.len());
+    let mut handles: Vec<Handle<Image>> =
+        Vec::with_capacity(TileType::ALL.len() + if extra_layer.is_some() { 1 } else { 0 });
     for tile_type in TileType::ALL {
         let entry_index = *lookup.get(&tile_type)?;
         let entry = entries.get(entry_index)?;
@@ -210,8 +358,23 @@ where
             // only record handle, check later
             handles.push(handle.clone());
         } else {
-            let Some(fallback) = create_fallback_image(&template_image_clone, fallback_color)
-            else {
+            let Some(fallback) = create_fallback_image(&template_image, fallback_color) else {
+                warn!("Skipping optional terrain texture array due to unsupported format");
+                return None;
+            };
+            let fb_handle = images.add(fallback);
+            handles.push(fb_handle);
+        }
+    }
+
+    let mut wall_has_texture = false;
+    if let Some(extra) = extra_layer {
+        if let Some(handle) = extra.handle {
+            images.get(handle)?;
+            handles.push(handle.clone());
+            wall_has_texture = true;
+        } else {
+            let Some(fallback) = create_fallback_image(&template_image, fallback_color) else {
                 warn!("Skipping optional terrain texture array due to unsupported format");
                 return None;
             };
@@ -232,8 +395,7 @@ where
     // build the array image
     let array_image = material::create_texture_array_image(&layers)?;
     let handle = images.add(array_image);
-    *cache = Some(handle.clone());
-    Some(handle)
+    Some((Some(handle), wall_has_texture))
 }
 
 fn find_template_image<'a, F>(
