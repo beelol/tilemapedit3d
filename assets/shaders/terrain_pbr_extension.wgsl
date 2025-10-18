@@ -504,25 +504,26 @@ fn fragment(
 #ifdef TERRAIN_MATERIAL_EXTENSION_BASE_COLOR_ARRAY
         let has_wall = terrain_material_extension.wall_enabled == 1u;
         let wall_layer_index = i32(terrain_material_extension.wall_layer_index);
-        let cliff_sample = if (has_wall) {
-            triplanar_sample_layer(
+        var cliff_sample: vec4<f32>;
+        if (has_wall) {
+            cliff_sample = triplanar_sample_layer(
                 terrain_base_color_array,
                 terrain_base_color_sampler,
                 pbr_input.world_position.xyz,
                 pbr_input.world_normal.xyz,
                 scale,
                 wall_layer_index,
-            )
+            );
         } else {
-            triplanar_sample_layer(
+            cliff_sample = triplanar_sample_layer(
                 terrain_base_color_array,
                 terrain_base_color_sampler,
                 pbr_input.world_position.xyz,
                 pbr_input.world_normal.xyz,
                 scale,
                 top_layer_index,
-            )
-        };
+            );
+        }
         var color_accum = vec3<f32>(0.0);
         var color_weight = 0.0;
 
@@ -568,25 +569,26 @@ fn fragment(
         let has_wall = terrain_material_extension.wall_enabled == 1u;
         let wall_layer_index = i32(terrain_material_extension.wall_layer_index);
         let wall_has_normal = terrain_material_extension.wall_has_normal == 1u;
-        let cliff_normal = if (has_wall && wall_has_normal) {
-            triplanar_sample_layer_normal(
+        var cliff_normal: vec3<f32>;
+        if (has_wall && wall_has_normal) {
+            cliff_normal = triplanar_sample_layer_normal(
                 terrain_normal_array,
                 terrain_normal_sampler,
                 pbr_input.world_position.xyz,
                 pbr_input.world_normal.xyz,
                 scale,
                 wall_layer_index,
-            )
+            );
         } else {
-            triplanar_sample_layer_normal(
+            cliff_normal = triplanar_sample_layer_normal(
                 terrain_normal_array,
                 terrain_normal_sampler,
                 pbr_input.world_position.xyz,
                 pbr_input.world_normal.xyz,
                 scale,
                 top_layer_index,
-            )
-        };
+            );
+        }
         var normal_accum = vec3<f32>(0.0);
         var normal_weight = 0.0;
 
@@ -635,25 +637,26 @@ fn fragment(
         let has_wall = terrain_material_extension.wall_enabled == 1u;
         let wall_layer_index = i32(terrain_material_extension.wall_layer_index);
         let wall_has_roughness = terrain_material_extension.wall_has_roughness == 1u;
-        let cliff_rough = if (has_wall && wall_has_roughness) {
-            triplanar_sample_layer_scalar(
+        var cliff_rough: f32;
+        if (has_wall && wall_has_roughness) {
+            cliff_rough = triplanar_sample_layer_scalar(
                 terrain_roughness_array,
                 terrain_roughness_sampler,
                 pbr_input.world_position.xyz,
                 pbr_input.world_normal.xyz,
                 scale,
                 wall_layer_index,
-            )
+            );
         } else {
-            triplanar_sample_layer_scalar(
+            cliff_rough = triplanar_sample_layer_scalar(
                 terrain_roughness_array,
                 terrain_roughness_sampler,
                 pbr_input.world_position.xyz,
                 pbr_input.world_normal.xyz,
                 scale,
                 top_layer_index,
-            )
-        };
+            );
+        }
         var roughness_accum = 0.0;
         var roughness_weight = 0.0;
 
