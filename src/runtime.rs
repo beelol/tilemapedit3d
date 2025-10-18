@@ -291,57 +291,67 @@ fn update_runtime_material(
         material.extension.splat_map = Some(splat.handle.clone());
     }
 
-    match textures.wall_texture() {
-        Some(wall) => {
-            if material
-                .extension
-                .wall_base_color
-                .as_ref()
-                .map(|existing| existing != &wall.base_color)
-                .unwrap_or(true)
-            {
-                material.extension.wall_base_color = Some(wall.base_color.clone());
-            }
+    let has_wall_texture = textures.wall_texture().is_some();
+    let wall_arrays = if has_wall_texture {
+        textures.ensure_wall_texture_arrays(&mut images)
+    } else {
+        None
+    };
 
-            match wall.normal.as_ref() {
-                Some(handle) => {
-                    if material
-                        .extension
-                        .wall_normal
-                        .as_ref()
-                        .map(|existing| existing != handle)
-                        .unwrap_or(true)
-                    {
-                        material.extension.wall_normal = Some(handle.clone());
-                    }
-                }
-                None => {
-                    material.extension.wall_normal = None;
+    if has_wall_texture {
+        let Some((wall_base_color, wall_normal, wall_roughness)) = wall_arrays else {
+            error!("Failed to assemble wall texture array after wall textures loaded");
+            *visibility = Visibility::Hidden;
+            return;
+        };
+
+        if material
+            .extension
+            .wall_base_color
+            .as_ref()
+            .map(|existing| existing != &wall_base_color)
+            .unwrap_or(true)
+        {
+            material.extension.wall_base_color = Some(wall_base_color.clone());
+        }
+
+        match wall_normal {
+            Some(handle) => {
+                if material
+                    .extension
+                    .wall_normal
+                    .as_ref()
+                    .map(|existing| existing != &handle)
+                    .unwrap_or(true)
+                {
+                    material.extension.wall_normal = Some(handle.clone());
                 }
             }
-
-            match wall.roughness.as_ref() {
-                Some(handle) => {
-                    if material
-                        .extension
-                        .wall_roughness
-                        .as_ref()
-                        .map(|existing| existing != handle)
-                        .unwrap_or(true)
-                    {
-                        material.extension.wall_roughness = Some(handle.clone());
-                    }
-                }
-                None => {
-                    material.extension.wall_roughness = None;
-                }
+            None => {
+                material.extension.wall_normal = None;
             }
         }
-        None => {
-            material.extension.wall_base_color = None;
-            material.extension.wall_normal = None;
-            material.extension.wall_roughness = None;
+
+        match wall_roughness {
+            Some(handle) => {
+                if material
+                    .extension
+                    .wall_roughness
+                    .as_ref()
+                    .map(|existing| existing != &handle)
+                    .unwrap_or(true)
+                {
+                    material.extension.wall_roughness = Some(handle.clone());
+                }
+            }
+            None => {
+                material.extension.wall_roughness = None;
+            }
         }
+    } else {
+        material.extension.wall_base_color = None;
+        material.extension.wall_normal = None;
+        material.extension.wall_roughness = None;
     }
 
     material.extension.params.map_size = Vec2::new(splat.size.x as f32, splat.size.y as f32);

@@ -43,6 +43,9 @@ pub struct TerrainTextureRegistry {
     normal_array: Option<Handle<Image>>,
     roughness_array: Option<Handle<Image>>,
     wall_texture: Option<WallTextureEntry>,
+    wall_base_color_array: Option<Handle<Image>>,
+    wall_normal_array: Option<Handle<Image>>,
+    wall_roughness_array: Option<Handle<Image>>,
 }
 
 impl TerrainTextureRegistry {
@@ -61,6 +64,9 @@ impl TerrainTextureRegistry {
 
     pub fn register_wall_texture(&mut self, entry: WallTextureEntry) {
         self.wall_texture = Some(entry);
+        self.wall_base_color_array = None;
+        self.wall_normal_array = None;
+        self.wall_roughness_array = None;
     }
 
     pub fn load_and_register(
@@ -176,6 +182,36 @@ impl TerrainTextureRegistry {
 
         Some((base_color, normal, roughness))
     }
+
+    pub fn ensure_wall_texture_arrays(
+        &mut self,
+        images: &mut Assets<Image>,
+    ) -> Option<(Handle<Image>, Option<Handle<Image>>, Option<Handle<Image>>)> {
+        let wall = self.wall_texture.as_ref()?;
+
+        let base_color =
+            ensure_single_layer_array(&wall.base_color, images, &mut self.wall_base_color_array)?;
+
+        let normal = match wall.normal.as_ref() {
+            Some(handle) => Some(ensure_single_layer_array(
+                handle,
+                images,
+                &mut self.wall_normal_array,
+            )?),
+            None => None,
+        };
+
+        let roughness = match wall.roughness.as_ref() {
+            Some(handle) => Some(ensure_single_layer_array(
+                handle,
+                images,
+                &mut self.wall_roughness_array,
+            )?),
+            None => None,
+        };
+
+        Some((base_color, normal, roughness))
+    }
 }
 
 fn ensure_base_color_array(
@@ -277,6 +313,28 @@ where
 
     // build the array image
     let array_image = material::create_texture_array_image(&layers)?;
+    let handle = images.add(array_image);
+    *cache = Some(handle.clone());
+    Some(handle)
+}
+
+fn ensure_single_layer_array(
+    source: &Handle<Image>,
+    images: &mut Assets<Image>,
+    cache: &mut Option<Handle<Image>>,
+) -> Option<Handle<Image>> {
+    if let Some(handle) = cache.clone() {
+        if images.get(&handle).is_some() {
+            return Some(handle);
+        }
+        *cache = None;
+    }
+
+    let array_image = {
+        let image = images.get(source)?;
+        material::create_texture_array_image(&[image])?
+    };
+
     let handle = images.add(array_image);
     *cache = Some(handle.clone());
     Some(handle)

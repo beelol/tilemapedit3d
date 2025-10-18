@@ -75,15 +75,15 @@ pub struct TerrainMaterialExtension {
     #[sampler(108)]
     pub splat_map: Option<Handle<Image>>,
 
-    #[texture(109, dimension = "2d")]
+    #[texture(109, dimension = "2d_array")]
     #[sampler(110)]
     pub wall_base_color: Option<Handle<Image>>,
 
-    #[texture(111, dimension = "2d")]
+    #[texture(111, dimension = "2d_array")]
     #[sampler(112)]
     pub wall_normal: Option<Handle<Image>>,
 
-    #[texture(113, dimension = "2d")]
+    #[texture(113, dimension = "2d_array")]
     #[sampler(114)]
     pub wall_roughness: Option<Handle<Image>>,
 }
