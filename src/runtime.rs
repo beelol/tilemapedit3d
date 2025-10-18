@@ -96,7 +96,7 @@ fn rebuild_runtime_mesh(
 
 fn generate_splat_map(
     state: Res<EditorState>,
-    mut runtime_splat: Option<ResMut<RuntimeSplatMap>>,
+    runtime_splat: Option<ResMut<RuntimeSplatMap>>,
     mut images: ResMut<Assets<Image>>,
 ) {
     if !state.map_dirty {

@@ -133,7 +133,7 @@ pub fn collect_texture_descriptors(
 
     let wall_descriptor = registry
         .wall_texture()
-        .map(|entry| {
+        .map(|entry| -> Result<WallTextureExportDescriptor> {
             let diffuse = TextureFileDescriptor {
                 source_path: resolve_asset_path(&entry.diffuse_path)?,
             };
@@ -383,10 +383,12 @@ pub fn encode_splatmap_png(image: &Image) -> Result<Vec<u8>> {
     let width = image.texture_descriptor.size.width;
     let height = image.texture_descriptor.size.height;
     let mut buffer = Vec::new();
-    {
-        let mut encoder = PngEncoder::new(&mut buffer);
-        encoder.write_image(&image.data, width, height, ExtendedColorType::Rgba8)?;
-    }
+    PngEncoder::new(&mut buffer).write_image(
+        &image.data,
+        width,
+        height,
+        ExtendedColorType::Rgba8,
+    )?;
     Ok(buffer)
 }
 
