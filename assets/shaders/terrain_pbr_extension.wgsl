@@ -717,6 +717,26 @@ fn fragment(
 
 //    out.color = vec4<f32>(in.uv_b.x / 10.0, in.uv_b.y, 0.0, 1.0);
 
+#ifdef DEBUG_SPLAT
+    let splat = textureSample(
+        terrain_splat_map,
+        terrain_splat_sampler,
+        world_to_splat_uv(pbr_input.world_position.xyz),
+    );
+    out.color = vec4<f32>(splat.rgb, 1.0);
+#endif
+
+#ifdef DEBUG_LAYER3
+    let test = triplanar_sample_layer(
+        terrain_base_color_array,
+        terrain_base_color_sampler,
+        pbr_input.world_position.xyz,
+        pbr_input.world_normal.xyz,
+        terrain_material_extension.uv_scale,
+        3   // test the rock layer index
+    );
+    out.color = vec4<f32>(test.rgb, 1.0);
+#endif
 
 #ifdef DEBUG_ROUGHNESS
 if (terrain_material_extension.layer_count > 0u) {
