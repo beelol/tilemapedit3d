@@ -37,6 +37,10 @@ pub struct TerrainMaterialParams {
     pub map_size: Vec2,
     pub tile_size: f32,
     pub cliff_blend_height: f32,
+    pub wall_layer_index: u32,
+    pub wall_enabled: u32,
+    pub wall_has_normal: u32,
+    pub wall_has_roughness: u32,
     #[allow(dead_code)]
     pub _padding: Vec2,
 }
@@ -49,6 +53,10 @@ impl Default for TerrainMaterialParams {
             map_size: Vec2::splat(1.0),
             tile_size: TILE_SIZE,
             cliff_blend_height: 0.2,
+            wall_layer_index: u32::MAX,
+            wall_enabled: 0,
+            wall_has_normal: 0,
+            wall_has_roughness: 0,
             _padding: Vec2::ZERO,
         }
     }
