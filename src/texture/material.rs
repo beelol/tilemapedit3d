@@ -74,6 +74,18 @@ pub struct TerrainMaterialExtension {
     #[texture(107, dimension = "2d")]
     #[sampler(108)]
     pub splat_map: Option<Handle<Image>>,
+
+    #[texture(109, dimension = "2d")]
+    #[sampler(110)]
+    pub wall_base_color: Option<Handle<Image>>,
+
+    #[texture(111, dimension = "2d")]
+    #[sampler(112)]
+    pub wall_normal: Option<Handle<Image>>,
+
+    #[texture(113, dimension = "2d")]
+    #[sampler(114)]
+    pub wall_roughness: Option<Handle<Image>>,
 }
 
 impl Default for TerrainMaterialExtension {
@@ -84,6 +96,9 @@ impl Default for TerrainMaterialExtension {
             normal_array: None,
             roughness_array: None,
             splat_map: None,
+            wall_base_color: None,
+            wall_normal: None,
+            wall_roughness: None,
         }
     }
 }
@@ -124,6 +139,15 @@ impl MaterialExtension for TerrainMaterialExtension {
 
             frag.shader_defs
                 .push("TERRAIN_MATERIAL_EXTENSION_SPLAT_MAP".into());
+
+            frag.shader_defs
+                .push("TERRAIN_MATERIAL_EXTENSION_WALL_BASE_COLOR".into());
+
+            frag.shader_defs
+                .push("TERRAIN_MATERIAL_EXTENSION_WALL_NORMAL".into());
+
+            frag.shader_defs
+                .push("TERRAIN_MATERIAL_EXTENSION_WALL_ROUGHNESS".into());
 
             // frag.shader_defs.push("DEBUG_ROUGHNESS".into());
             // frag.shader_defs.push("DEBUG_NORMALS".into());

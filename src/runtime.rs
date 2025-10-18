@@ -166,6 +166,33 @@ fn update_runtime_material(
                 );
             }
         }
+
+        if let Some(wall) = registry.wall_texture() {
+            waiting_for_textures |= check_image_handle_state(
+                &asset_server,
+                wall.base_color.id(),
+                &mut encountered_failure,
+                "Wall base color texture failed to load",
+            );
+
+            if let Some(normal) = wall.normal.as_ref() {
+                waiting_for_textures |= check_image_handle_state(
+                    &asset_server,
+                    normal.id(),
+                    &mut encountered_failure,
+                    "Wall normal map failed to load",
+                );
+            }
+
+            if let Some(roughness) = wall.roughness.as_ref() {
+                waiting_for_textures |= check_image_handle_state(
+                    &asset_server,
+                    roughness.id(),
+                    &mut encountered_failure,
+                    "Wall roughness map failed to load",
+                );
+            }
+        }
     }
 
     if encountered_failure {
@@ -264,6 +291,59 @@ fn update_runtime_material(
         material.extension.splat_map = Some(splat.handle.clone());
     }
 
+    match textures.wall_texture() {
+        Some(wall) => {
+            if material
+                .extension
+                .wall_base_color
+                .as_ref()
+                .map(|existing| existing != &wall.base_color)
+                .unwrap_or(true)
+            {
+                material.extension.wall_base_color = Some(wall.base_color.clone());
+            }
+
+            match wall.normal.as_ref() {
+                Some(handle) => {
+                    if material
+                        .extension
+                        .wall_normal
+                        .as_ref()
+                        .map(|existing| existing != handle)
+                        .unwrap_or(true)
+                    {
+                        material.extension.wall_normal = Some(handle.clone());
+                    }
+                }
+                None => {
+                    material.extension.wall_normal = None;
+                }
+            }
+
+            match wall.roughness.as_ref() {
+                Some(handle) => {
+                    if material
+                        .extension
+                        .wall_roughness
+                        .as_ref()
+                        .map(|existing| existing != handle)
+                        .unwrap_or(true)
+                    {
+                        material.extension.wall_roughness = Some(handle.clone());
+                    }
+                }
+                None => {
+                    material.extension.wall_roughness = None;
+                }
+            }
+        }
+        None => {
+            material.extension.wall_base_color = None;
+            material.extension.wall_normal = None;
+            material.extension.wall_roughness = None;
+        }
+    }
+
     material.extension.params.map_size = Vec2::new(splat.size.x as f32, splat.size.y as f32);
     material.extension.params.tile_size = TILE_SIZE;
     material.extension.params.cliff_blend_height = 0.2;
@@ -282,6 +362,23 @@ fn check_handle_state(
         Some(LoadState::Loaded) => false,
         Some(LoadState::Failed(_)) => {
             error!(tile_type = ?tile_type, message);
+            *encountered_failure = true;
+            false
+        }
+        _ => true,
+    }
+}
+
+fn check_image_handle_state(
+    asset_server: &AssetServer,
+    id: AssetId<Image>,
+    encountered_failure: &mut bool,
+    message: &str,
+) -> bool {
+    match asset_server.get_load_state(id) {
+        Some(LoadState::Loaded) => false,
+        Some(LoadState::Failed(_)) => {
+            error!("{message}");
             *encountered_failure = true;
             false
         }

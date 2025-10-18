@@ -62,6 +62,27 @@ var terrain_splat_map: texture_2d<f32>;
 var terrain_splat_sampler: sampler;
 #endif
 
+#ifdef TERRAIN_MATERIAL_EXTENSION_WALL_BASE_COLOR
+@group(2) @binding(109)
+var terrain_wall_base_color: texture_2d<f32>;
+@group(2) @binding(110)
+var terrain_wall_base_color_sampler: sampler;
+#endif
+
+#ifdef TERRAIN_MATERIAL_EXTENSION_WALL_NORMAL
+@group(2) @binding(111)
+var terrain_wall_normal: texture_2d<f32>;
+@group(2) @binding(112)
+var terrain_wall_normal_sampler: sampler;
+#endif
+
+#ifdef TERRAIN_MATERIAL_EXTENSION_WALL_ROUGHNESS
+@group(2) @binding(113)
+var terrain_wall_roughness: texture_2d<f32>;
+@group(2) @binding(114)
+var terrain_wall_roughness_sampler: sampler;
+#endif
+
 fn triplanar_sample(
     tex: texture_2d<f32>,
     samp: sampler,
@@ -198,10 +219,90 @@ fn triplanar_sample_layer_scalar(
 }
 #endif
 
+#ifdef TERRAIN_MATERIAL_EXTENSION_WALL_NORMAL
+fn triplanar_sample_wall_normal(
+    tex: texture_2d<f32>,
+    samp: sampler,
+    pos: vec3<f32>,
+    norm: vec3<f32>,
+    scale: f32,
+) -> vec3<f32> {
+    let n = normalize(norm);
+    let weights = abs(n) / (abs(n.x) + abs(n.y) + abs(n.z));
+
+    let uv_x = fract(pos.yz * scale);
+    let uv_y = fract(pos.xz * scale);
+    let uv_z = fract(pos.xy * scale);
+
+    let sample_x = textureSample(tex, samp, uv_x).xyz * 2.0 - vec3<f32>(1.0);
+    let sample_y = textureSample(tex, samp, uv_y).xyz * 2.0 - vec3<f32>(1.0);
+    let sample_z = textureSample(tex, samp, uv_z).xyz * 2.0 - vec3<f32>(1.0);
+
+    var sign_x: f32;
+    if (n.x >= 0.0) {
+        sign_x = 1.0;
+    } else {
+        sign_x = -1.0;
+    }
+
+    var sign_y: f32;
+    if (n.y >= 0.0) {
+        sign_y = 1.0;
+    } else {
+        sign_y = -1.0;
+    }
+
+    var sign_z: f32;
+    if (n.z >= 0.0) {
+        sign_z = 1.0;
+    } else {
+        sign_z = -1.0;
+    }
+
+    let world_x = normalize(
+        sample_x.x * vec3<f32>(0.0, sign_x, 0.0)
+            + sample_x.y * vec3<f32>(0.0, 0.0, 1.0)
+            + sample_x.z * vec3<f32>(sign_x, 0.0, 0.0),
+    );
+    let world_y = normalize(
+        sample_y.x * vec3<f32>(sign_y, 0.0, 0.0)
+            + sample_y.y * vec3<f32>(0.0, 0.0, 1.0)
+            + sample_y.z * vec3<f32>(0.0, sign_y, 0.0),
+    );
+    let world_z = normalize(
+        sample_z.x * vec3<f32>(sign_z, 0.0, 0.0)
+            + sample_z.y * vec3<f32>(0.0, sign_z, 0.0)
+            + sample_z.z * vec3<f32>(0.0, 0.0, sign_z),
+    );
+
+    return normalize(world_x * weights.x + world_y * weights.y + world_z * weights.z);
+}
+#endif
+
+#ifdef TERRAIN_MATERIAL_EXTENSION_WALL_ROUGHNESS
+fn triplanar_sample_wall_scalar(
+    tex: texture_2d<f32>,
+    samp: sampler,
+    pos: vec3<f32>,
+    norm: vec3<f32>,
+    scale: f32,
+) -> f32 {
+    let n = normalize(norm);
+    let weights = abs(n) / (abs(n.x) + abs(n.y) + abs(n.z));
+
+    let uv_x = fract(pos.yz * scale);
+    let uv_y = fract(pos.xz * scale);
+    let uv_z = fract(pos.xy * scale);
+
+    let sample_x = textureSample(tex, samp, uv_x).g;
+    let sample_y = textureSample(tex, samp, uv_y).g;
+    let sample_z = textureSample(tex, samp, uv_z).g;
+
+    return sample_x * weights.x + sample_y * weights.y + sample_z * weights.z;
+}
+#endif
+
 const MAX_TERRAIN_LAYERS: u32 = 4u;
-const CLIFF_ROCK_LAYER: u32 = 2u;
-// TODO: Replace with a dedicated sandstone cliff layer when the asset is available.
-const CLIFF_SANDSTONE_LAYER: u32 = 2u;
 
 fn assign_weight(weights: vec4<f32>, index: u32, value: f32) -> vec4<f32> {
     var result = weights;
@@ -253,26 +354,6 @@ fn clamp_layer_index(layer: i32, available_layers: u32) -> i32 {
     }
     let max_layer = i32(available_layers) - 1;
     return clamp(layer, 0, max_layer);
-}
-
-fn cliff_layer_for_tile(tile_type: u32) -> u32 {
-    switch tile_type {
-        case 0u: {
-            return CLIFF_ROCK_LAYER;
-        }
-        case 1u: {
-            return CLIFF_ROCK_LAYER;
-        }
-        case 2u: {
-            return CLIFF_ROCK_LAYER;
-        }
-        case 3u: {
-            return CLIFF_SANDSTONE_LAYER;
-        }
-        default: {
-            return CLIFF_ROCK_LAYER;
-        }
-    }
 }
 
 fn mask_float(condition: bool) -> f32 {
@@ -504,11 +585,6 @@ fn fragment(
         let fallback_source = 0.0;
 #endif
         let top_layer_index = clamp_layer_index(i32(round(fallback_source)), available_layers);
-        let top_layer = u32(top_layer_index);
-        let cliff_layer = clamp_layer_index(
-            i32(cliff_layer_for_tile(top_layer)),
-            available_layers,
-        );
         let seam_height = in.uv_b.y;
         let safe_blend = max(terrain_material_extension.cliff_blend_height, 0.0001);
         let top_delta = seam_height - pbr_input.world_position.y;
@@ -530,14 +606,24 @@ fn fragment(
         let cliff_weight = max(1.0 - top_blend - bottom_blend, 0.0);
 
 #ifdef TERRAIN_MATERIAL_EXTENSION_BASE_COLOR_ARRAY
+#ifdef TERRAIN_MATERIAL_EXTENSION_WALL_BASE_COLOR
+        let cliff_sample = triplanar_sample(
+            terrain_wall_base_color,
+            terrain_wall_base_color_sampler,
+            pbr_input.world_position.xyz,
+            pbr_input.world_normal.xyz,
+            scale,
+        );
+#else
         let cliff_sample = triplanar_sample_layer(
             terrain_base_color_array,
             terrain_base_color_sampler,
             pbr_input.world_position.xyz,
             pbr_input.world_normal.xyz,
             scale,
-            cliff_layer,
+            top_layer_index,
         );
+#endif
         var color_accum = vec3<f32>(0.0);
         var color_weight = 0.0;
 
@@ -580,14 +666,24 @@ fn fragment(
 #endif
 
 #ifdef TERRAIN_MATERIAL_EXTENSION_NORMAL_ARRAY
+#ifdef TERRAIN_MATERIAL_EXTENSION_WALL_NORMAL
+        let cliff_normal = triplanar_sample_wall_normal(
+            terrain_wall_normal,
+            terrain_wall_normal_sampler,
+            pbr_input.world_position.xyz,
+            pbr_input.world_normal.xyz,
+            scale,
+        );
+#else
         let cliff_normal = triplanar_sample_layer_normal(
             terrain_normal_array,
             terrain_normal_sampler,
             pbr_input.world_position.xyz,
             pbr_input.world_normal.xyz,
             scale,
-            cliff_layer,
+            top_layer_index,
         );
+#endif
         var normal_accum = vec3<f32>(0.0);
         var normal_weight = 0.0;
 
@@ -633,14 +729,24 @@ fn fragment(
 #endif
 
 #ifdef TERRAIN_MATERIAL_EXTENSION_ROUGHNESS_ARRAY
+#ifdef TERRAIN_MATERIAL_EXTENSION_WALL_ROUGHNESS
+        let cliff_rough = triplanar_sample_wall_scalar(
+            terrain_wall_roughness,
+            terrain_wall_roughness_sampler,
+            pbr_input.world_position.xyz,
+            pbr_input.world_normal.xyz,
+            scale,
+        );
+#else
         let cliff_rough = triplanar_sample_layer_scalar(
             terrain_roughness_array,
             terrain_roughness_sampler,
             pbr_input.world_position.xyz,
             pbr_input.world_normal.xyz,
             scale,
-            cliff_layer,
+            top_layer_index,
         );
+#endif
         var roughness_accum = 0.0;
         var roughness_weight = 0.0;
 

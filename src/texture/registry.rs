@@ -23,6 +23,18 @@ pub struct TerrainTextureEntry {
     pub dispersion_path: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct WallTextureEntry {
+    pub id: String,
+    pub name: String,
+    pub base_color: Handle<Image>,
+    pub normal: Option<Handle<Image>>,
+    pub roughness: Option<Handle<Image>>,
+    pub diffuse_path: String,
+    pub normal_path: Option<String>,
+    pub roughness_path: Option<String>,
+}
+
 #[derive(Resource, Default)]
 pub struct TerrainTextureRegistry {
     entries: Vec<TerrainTextureEntry>,
@@ -30,6 +42,7 @@ pub struct TerrainTextureRegistry {
     base_color_array: Option<Handle<Image>>,
     normal_array: Option<Handle<Image>>,
     roughness_array: Option<Handle<Image>>,
+    wall_texture: Option<WallTextureEntry>,
 }
 
 impl TerrainTextureRegistry {
@@ -44,6 +57,10 @@ impl TerrainTextureRegistry {
         self.base_color_array = None;
         self.normal_array = None;
         self.roughness_array = None;
+    }
+
+    pub fn register_wall_texture(&mut self, entry: WallTextureEntry) {
+        self.wall_texture = Some(entry);
     }
 
     pub fn load_and_register(
@@ -97,6 +114,35 @@ impl TerrainTextureRegistry {
         self.lookup
             .get(&tile_type)
             .and_then(|index| self.entries.get(*index))
+    }
+
+    pub fn load_and_register_wall(
+        &mut self,
+        id: impl Into<String>,
+        name: impl Into<String>,
+        asset_server: &AssetServer,
+        base_color: &str,
+        normal: Option<&str>,
+        roughness: Option<&str>,
+    ) {
+        let base_color_handle: Handle<Image> = asset_server.load(base_color);
+        let normal_handle: Option<Handle<Image>> = normal.map(|path| asset_server.load(path));
+        let roughness_handle: Option<Handle<Image>> = roughness.map(|path| asset_server.load(path));
+
+        self.register_wall_texture(WallTextureEntry {
+            id: id.into(),
+            name: name.into(),
+            base_color: base_color_handle,
+            normal: normal_handle,
+            roughness: roughness_handle,
+            diffuse_path: base_color.to_string(),
+            normal_path: normal.map(|s| s.to_string()),
+            roughness_path: roughness.map(|s| s.to_string()),
+        });
+    }
+
+    pub fn wall_texture(&self) -> Option<&WallTextureEntry> {
+        self.wall_texture.as_ref()
     }
 
     pub fn ensure_texture_arrays(

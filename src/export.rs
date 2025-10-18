@@ -36,6 +36,14 @@ pub struct TextureExportDescriptor {
     pub roughness: Option<TextureFileDescriptor>,
 }
 
+#[derive(Clone)]
+pub struct WallTextureExportDescriptor {
+    pub identifier: String,
+    pub diffuse: TextureFileDescriptor,
+    pub normal: Option<TextureFileDescriptor>,
+    pub roughness: Option<TextureFileDescriptor>,
+}
+
 #[derive(Serialize)]
 struct MetadataTextureEntry {
     id: String,
@@ -45,6 +53,16 @@ struct MetadataTextureEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     roughness: Option<String>,
     splatmap_channel: usize,
+}
+
+#[derive(Serialize)]
+struct MetadataWallTexture {
+    id: String,
+    diffuse: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    normal: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    roughness: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -59,18 +77,19 @@ struct ExportMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     tilemap: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    wall_diffuse: Option<String>,
+    wall_texture: Option<MetadataWallTexture>,
 }
 
 pub fn collect_texture_descriptors(
     map: &TileMap,
     registry: &TerrainTextureRegistry,
-) -> Result<Vec<TextureExportDescriptor>> {
+) -> Result<(
+    Vec<TextureExportDescriptor>,
+    Option<WallTextureExportDescriptor>,
+)> {
     use std::collections::HashSet;
 
     let mut used: HashSet<TileType> = HashSet::new();
-    // Always include the cliff texture so wall rendering assets are exported
-    used.insert(TileType::Cliff);
     for tile in &map.tiles {
         used.insert(tile.tile_type);
     }
@@ -112,7 +131,37 @@ pub fn collect_texture_descriptors(
         });
     }
 
-    Ok(descriptors)
+    let wall_descriptor = registry
+        .wall_texture()
+        .map(|entry| {
+            let diffuse = TextureFileDescriptor {
+                source_path: resolve_asset_path(&entry.diffuse_path)?,
+            };
+
+            let normal = match &entry.normal_path {
+                Some(path) => Some(TextureFileDescriptor {
+                    source_path: resolve_asset_path(path)?,
+                }),
+                None => None,
+            };
+
+            let roughness = match &entry.roughness_path {
+                Some(path) => Some(TextureFileDescriptor {
+                    source_path: resolve_asset_path(path)?,
+                }),
+                None => None,
+            };
+
+            Ok(WallTextureExportDescriptor {
+                identifier: entry.id.clone(),
+                diffuse,
+                normal,
+                roughness,
+            })
+        })
+        .transpose()?;
+
+    Ok((descriptors, wall_descriptor))
 }
 
 pub fn export_package(
@@ -120,6 +169,7 @@ pub fn export_package(
     map: TileMap,
     map_name: String,
     textures: Vec<TextureExportDescriptor>,
+    wall_texture: Option<WallTextureExportDescriptor>,
     splat_png: Vec<u8>,
 ) -> Result<()> {
     if let Some(parent) = output_path.parent() {
@@ -135,7 +185,8 @@ pub fn export_package(
 
     let tilemap_json = serde_json::to_vec_pretty(&map)?;
 
-    let (metadata, texture_files, wall_diffuse) = build_metadata_and_files(&textures)?;
+    let (metadata, texture_files, wall_texture_metadata) =
+        build_metadata_and_files(&textures, wall_texture)?;
     let metadata = ExportMetadata {
         name: map_name,
         width: map.width,
@@ -145,7 +196,7 @@ pub fn export_package(
         splatmap: "splatmap.png".to_string(),
         mesh: "mesh.glb".to_string(),
         tilemap: Some("tilemap.json".to_string()),
-        wall_diffuse,
+        wall_texture: wall_texture_metadata,
     };
     let metadata_json = serde_json::to_vec_pretty(&metadata)?;
 
@@ -181,82 +232,118 @@ pub fn export_package(
 
 fn build_metadata_and_files(
     textures: &[TextureExportDescriptor],
+    wall_texture: Option<WallTextureExportDescriptor>,
 ) -> Result<(
     Vec<MetadataTextureEntry>,
     Vec<(String, Vec<u8>)>,
-    Option<String>,
+    Option<MetadataWallTexture>,
 )> {
     let mut metadata = Vec::new();
     let mut files = Vec::new();
-    let mut wall_diffuse = None;
 
     for descriptor in textures {
-        ensure!(
-            descriptor
-                .identifier
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'),
-            "Texture identifier contains unsupported characters"
-        );
+        validate_identifier(&descriptor.identifier)?;
 
-        let diffuse_path = texture_target_path(
+        let diffuse_path = ingest_texture_file(
             &descriptor.identifier,
             "diffuse",
-            &descriptor.diffuse.source_path,
-        );
-        let diffuse_bytes = std::fs::read(&descriptor.diffuse.source_path).with_context(|| {
-            format!(
-                "Failed to read diffuse texture for {} from {}",
-                descriptor.identifier,
-                descriptor.diffuse.source_path.display()
-            )
-        })?;
-        files.push((diffuse_path.clone(), diffuse_bytes));
+            &descriptor.diffuse,
+            &mut files,
+        )?;
+        let normal_path = ingest_optional_texture_file(
+            &descriptor.identifier,
+            "normal",
+            &descriptor.normal,
+            &mut files,
+        )?;
+        let roughness_path = ingest_optional_texture_file(
+            &descriptor.identifier,
+            "roughness",
+            &descriptor.roughness,
+            &mut files,
+        )?;
 
-        if descriptor.tile_type == TileType::Cliff && wall_diffuse.is_none() {
-            wall_diffuse = Some(diffuse_path.clone());
-        }
-
-        let mut entry = MetadataTextureEntry {
+        metadata.push(MetadataTextureEntry {
             id: descriptor.identifier.clone(),
             diffuse: diffuse_path,
-            normal: None,
-            roughness: None,
+            normal: normal_path,
+            roughness: roughness_path,
             splatmap_channel: descriptor.tile_type.as_index(),
-        };
-
-        if let Some(normal) = &descriptor.normal {
-            let normal_path =
-                texture_target_path(&descriptor.identifier, "normal", &normal.source_path);
-            let normal_bytes = std::fs::read(&normal.source_path).with_context(|| {
-                format!(
-                    "Failed to read normal texture for {} from {}",
-                    descriptor.identifier,
-                    normal.source_path.display()
-                )
-            })?;
-            files.push((normal_path.clone(), normal_bytes));
-            entry.normal = Some(normal_path);
-        }
-
-        if let Some(roughness) = &descriptor.roughness {
-            let roughness_path =
-                texture_target_path(&descriptor.identifier, "roughness", &roughness.source_path);
-            let roughness_bytes = std::fs::read(&roughness.source_path).with_context(|| {
-                format!(
-                    "Failed to read roughness texture for {} from {}",
-                    descriptor.identifier,
-                    roughness.source_path.display()
-                )
-            })?;
-            files.push((roughness_path.clone(), roughness_bytes));
-            entry.roughness = Some(roughness_path);
-        }
-
-        metadata.push(entry);
+        });
     }
 
-    Ok((metadata, files, wall_diffuse))
+    let wall_metadata = match wall_texture {
+        Some(descriptor) => {
+            validate_identifier(&descriptor.identifier)?;
+            let diffuse = ingest_texture_file(
+                &descriptor.identifier,
+                "diffuse",
+                &descriptor.diffuse,
+                &mut files,
+            )?;
+            let normal = ingest_optional_texture_file(
+                &descriptor.identifier,
+                "normal",
+                &descriptor.normal,
+                &mut files,
+            )?;
+            let roughness = ingest_optional_texture_file(
+                &descriptor.identifier,
+                "roughness",
+                &descriptor.roughness,
+                &mut files,
+            )?;
+
+            Some(MetadataWallTexture {
+                id: descriptor.identifier,
+                diffuse,
+                normal,
+                roughness,
+            })
+        }
+        None => None,
+    };
+
+    Ok((metadata, files, wall_metadata))
+}
+
+fn validate_identifier(identifier: &str) -> Result<()> {
+    ensure!(
+        identifier
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'),
+        "Texture identifier contains unsupported characters"
+    );
+    Ok(())
+}
+
+fn ingest_texture_file(
+    identifier: &str,
+    kind: &str,
+    source: &TextureFileDescriptor,
+    files: &mut Vec<(String, Vec<u8>)>,
+) -> Result<String> {
+    let target_path = texture_target_path(identifier, kind, &source.source_path);
+    let bytes = std::fs::read(&source.source_path).with_context(|| {
+        format!(
+            "Failed to read {kind} texture for {identifier} from {}",
+            source.source_path.display()
+        )
+    })?;
+    files.push((target_path.clone(), bytes));
+    Ok(target_path)
+}
+
+fn ingest_optional_texture_file(
+    identifier: &str,
+    kind: &str,
+    source: &Option<TextureFileDescriptor>,
+    files: &mut Vec<(String, Vec<u8>)>,
+) -> Result<Option<String>> {
+    match source {
+        Some(descriptor) => ingest_texture_file(identifier, kind, descriptor, files).map(Some),
+        None => Ok(None),
+    }
 }
 
 fn texture_target_path(id: &str, kind: &str, source: &Path) -> String {
