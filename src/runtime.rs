@@ -215,16 +215,14 @@ fn update_runtime_material(
         return;
     };
 
-    let Some((base_handle, normal_handle, roughness_handle)) =
-        textures.ensure_texture_arrays(&mut images)
-    else {
+    let Some(arrays) = textures.ensure_texture_arrays(&mut images) else {
         error!("Failed to assemble terrain texture arrays after previews loaded");
         *visibility = Visibility::Hidden;
         return;
     };
 
     let desired_layers = images
-        .get(&base_handle)
+        .get(&arrays.base_color)
         .map(|image| image.texture_descriptor.size.depth_or_array_layers)
         .unwrap_or(0);
 
@@ -233,21 +231,26 @@ fn update_runtime_material(
         return;
     }
 
-    if material.extension.params.layer_count != desired_layers {
-        material.extension.params.layer_count = desired_layers;
+    let floor_layers = arrays
+        .wall_layer_index
+        .map(|_| desired_layers.saturating_sub(1))
+        .unwrap_or(desired_layers);
+
+    if material.extension.params.layer_count != floor_layers {
+        material.extension.params.layer_count = floor_layers;
     }
 
     if material
         .extension
         .base_color_array
         .as_ref()
-        .map(|handle| handle != &base_handle)
+        .map(|handle| handle != &arrays.base_color)
         .unwrap_or(true)
     {
-        material.extension.base_color_array = Some(base_handle.clone());
+        material.extension.base_color_array = Some(arrays.base_color.clone());
     }
 
-    match normal_handle {
+    match arrays.normal.clone() {
         Some(handle) => {
             if material
                 .extension
@@ -264,7 +267,7 @@ fn update_runtime_material(
         }
     }
 
-    match roughness_handle {
+    match arrays.roughness.clone() {
         Some(handle) => {
             if material
                 .extension
@@ -291,72 +294,13 @@ fn update_runtime_material(
         material.extension.splat_map = Some(splat.handle.clone());
     }
 
-    let has_wall_texture = textures.wall_texture().is_some();
-    let wall_arrays = if has_wall_texture {
-        textures.ensure_wall_texture_arrays(&mut images)
-    } else {
-        None
-    };
-
-    if has_wall_texture {
-        let Some((wall_base_color, wall_normal, wall_roughness)) = wall_arrays else {
-            error!("Failed to assemble wall texture array after wall textures loaded");
-            *visibility = Visibility::Hidden;
-            return;
-        };
-
-        if material
-            .extension
-            .wall_base_color
-            .as_ref()
-            .map(|existing| existing != &wall_base_color)
-            .unwrap_or(true)
-        {
-            material.extension.wall_base_color = Some(wall_base_color.clone());
-        }
-
-        match wall_normal {
-            Some(handle) => {
-                if material
-                    .extension
-                    .wall_normal
-                    .as_ref()
-                    .map(|existing| existing != &handle)
-                    .unwrap_or(true)
-                {
-                    material.extension.wall_normal = Some(handle.clone());
-                }
-            }
-            None => {
-                material.extension.wall_normal = None;
-            }
-        }
-
-        match wall_roughness {
-            Some(handle) => {
-                if material
-                    .extension
-                    .wall_roughness
-                    .as_ref()
-                    .map(|existing| existing != &handle)
-                    .unwrap_or(true)
-                {
-                    material.extension.wall_roughness = Some(handle.clone());
-                }
-            }
-            None => {
-                material.extension.wall_roughness = None;
-            }
-        }
-    } else {
-        material.extension.wall_base_color = None;
-        material.extension.wall_normal = None;
-        material.extension.wall_roughness = None;
-    }
-
     material.extension.params.map_size = Vec2::new(splat.size.x as f32, splat.size.y as f32);
     material.extension.params.tile_size = TILE_SIZE;
     material.extension.params.cliff_blend_height = 0.2;
+    material.extension.params.wall_enabled = arrays.wall_layer_index.map(|_| 1u32).unwrap_or(0);
+    material.extension.params.wall_layer_index = arrays.wall_layer_index.unwrap_or(u32::MAX);
+    material.extension.params.wall_has_normal = if arrays.wall_has_normal { 1 } else { 0 };
+    material.extension.params.wall_has_roughness = if arrays.wall_has_roughness { 1 } else { 0 };
 
     *visibility = Visibility::Visible;
 }

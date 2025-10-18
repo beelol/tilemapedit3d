@@ -37,6 +37,10 @@ pub struct TerrainMaterialParams {
     pub map_size: Vec2,
     pub tile_size: f32,
     pub cliff_blend_height: f32,
+    pub wall_layer_index: u32,
+    pub wall_enabled: u32,
+    pub wall_has_normal: u32,
+    pub wall_has_roughness: u32,
     #[allow(dead_code)]
     pub _padding: Vec2,
 }
@@ -49,6 +53,10 @@ impl Default for TerrainMaterialParams {
             map_size: Vec2::splat(1.0),
             tile_size: TILE_SIZE,
             cliff_blend_height: 0.2,
+            wall_layer_index: u32::MAX,
+            wall_enabled: 0,
+            wall_has_normal: 0,
+            wall_has_roughness: 0,
             _padding: Vec2::ZERO,
         }
     }
@@ -74,18 +82,6 @@ pub struct TerrainMaterialExtension {
     #[texture(107, dimension = "2d")]
     #[sampler(108)]
     pub splat_map: Option<Handle<Image>>,
-
-    #[texture(109, dimension = "2d_array")]
-    #[sampler(110)]
-    pub wall_base_color: Option<Handle<Image>>,
-
-    #[texture(111, dimension = "2d_array")]
-    #[sampler(112)]
-    pub wall_normal: Option<Handle<Image>>,
-
-    #[texture(113, dimension = "2d_array")]
-    #[sampler(114)]
-    pub wall_roughness: Option<Handle<Image>>,
 }
 
 impl Default for TerrainMaterialExtension {
@@ -96,9 +92,6 @@ impl Default for TerrainMaterialExtension {
             normal_array: None,
             roughness_array: None,
             splat_map: None,
-            wall_base_color: None,
-            wall_normal: None,
-            wall_roughness: None,
         }
     }
 }
@@ -139,15 +132,6 @@ impl MaterialExtension for TerrainMaterialExtension {
 
             frag.shader_defs
                 .push("TERRAIN_MATERIAL_EXTENSION_SPLAT_MAP".into());
-
-            frag.shader_defs
-                .push("TERRAIN_MATERIAL_EXTENSION_WALL_BASE_COLOR".into());
-
-            frag.shader_defs
-                .push("TERRAIN_MATERIAL_EXTENSION_WALL_NORMAL".into());
-
-            frag.shader_defs
-                .push("TERRAIN_MATERIAL_EXTENSION_WALL_ROUGHNESS".into());
 
             // frag.shader_defs.push("DEBUG_ROUGHNESS".into());
             // frag.shader_defs.push("DEBUG_NORMALS".into());
