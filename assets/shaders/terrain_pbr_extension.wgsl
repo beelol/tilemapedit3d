@@ -488,12 +488,16 @@ fn fragment(
         let seam_height = in.uv_b.y;
         let safe_blend = max(terrain_material_extension.cliff_blend_height, 0.0001);
         let top_delta = seam_height - pbr_input.world_position.y;
-        let top_blend = clamp(1.0 - (top_delta / safe_blend), 0.0, 1.0);
+        var top_blend = clamp(1.0 - (top_delta / safe_blend), 0.0, 1.0);
 
         var bottom_blend = 0.0;
         var bottom_layer_index = top_layer_index;
         var has_bottom = false;
+        var force_cliff = false;
 #ifdef VERTEX_COLORS
+        if (in.color.b > 0.5) {
+            force_cliff = true;
+        }
         if (in.color.r >= 0.0) {
             let candidate = clamp_layer_index(i32(round(in.color.r)), available_layers);
             bottom_layer_index = candidate;
@@ -503,7 +507,13 @@ fn fragment(
         }
 #endif
 
-        let cliff_weight = max(1.0 - top_blend - bottom_blend, 0.0);
+        var cliff_weight = max(1.0 - top_blend - bottom_blend, 0.0);
+
+        if (force_cliff) {
+            top_blend = 0.0;
+            bottom_blend = 0.0;
+            cliff_weight = 1.0;
+        }
 
         let wall_enabled = terrain_material_extension.wall_enabled == 1u;
         let wall_layer_index = i32(terrain_material_extension.wall_layer_index);
