@@ -129,6 +129,7 @@ fn append_tile_geometry(
 ) {
     let idx = map.idx(x, y);
     let corners = corner_cache[idx];
+    let tile_kind = map.get(x, y).kind;
     let x0 = x as f32 * TILE_SIZE;
     let x1 = x0 + TILE_SIZE;
     let z0 = y as f32 * TILE_SIZE;
@@ -155,116 +156,168 @@ fn append_tile_geometry(
         top_color_info,
     );
 
-    let (bnw, bne) = if y > 0 {
-        let neighbor = corner_cache[map.idx(x, y - 1)];
-        (neighbor[CORNER_SW], neighbor[CORNER_SE])
+    let (bnw, bne, north_neighbor_kind, north_bottom_layer) = if y > 0 {
+        let neighbor_idx = map.idx(x, y - 1);
+        let neighbor = corner_cache[neighbor_idx];
+        let neighbor_tile = map.get(x, y - 1);
+        (
+            neighbor[CORNER_SW],
+            neighbor[CORNER_SE],
+            Some(neighbor_tile.kind),
+            Some(neighbor_tile.tile_type.as_index() as f32),
+        )
     } else {
-        (0.0, 0.0)
+        (0.0, 0.0, None, None)
     };
-    let north_bottom_layer = if y > 0 {
-        Some(map.get(x, y - 1).tile_type.as_index() as f32)
-    } else {
-        None
-    };
+    let north_bottom_a_y = bnw.min(nw.y);
+    let north_bottom_b_y = bne.min(ne.y);
+    let north_bottom_a = Vec3::new(x0, north_bottom_a_y, z0);
+    let north_bottom_b = Vec3::new(x1, north_bottom_b_y, z0);
     let north_bottom_info = north_bottom_layer.map(|layer| {
-        let bottom_a_y = bnw.min(nw.y);
-        let bottom_b_y = bne.min(ne.y);
-        let bottom_height = bottom_a_y.max(bottom_b_y);
+        let bottom_height = north_bottom_a_y.max(north_bottom_b_y);
         [layer, bottom_height, 0.0, 0.0]
     });
+    let north_force_cliff = should_force_cliff_face(
+        tile_kind,
+        north_neighbor_kind,
+        nw,
+        ne,
+        north_bottom_a,
+        north_bottom_b,
+    );
     buffer.add_side_face(
         nw,
         ne,
-        Vec3::new(x0, bnw.min(nw.y), z0),
-        Vec3::new(x1, bne.min(ne.y), z0),
+        north_bottom_a,
+        north_bottom_b,
         RampDirection::North,
         tile_layer,
         nw.y.max(ne.y),
         north_bottom_info,
+        north_force_cliff,
     );
 
-    let (bsw, bse) = if y + 1 < map.height {
-        let neighbor = corner_cache[map.idx(x, y + 1)];
-        (neighbor[CORNER_NW], neighbor[CORNER_NE])
+    let (bsw, bse, south_neighbor_kind, south_bottom_layer) = if y + 1 < map.height {
+        let neighbor_idx = map.idx(x, y + 1);
+        let neighbor = corner_cache[neighbor_idx];
+        let neighbor_tile = map.get(x, y + 1);
+        (
+            neighbor[CORNER_NW],
+            neighbor[CORNER_NE],
+            Some(neighbor_tile.kind),
+            Some(neighbor_tile.tile_type.as_index() as f32),
+        )
     } else {
-        (0.0, 0.0)
+        (0.0, 0.0, None, None)
     };
-    let south_bottom_layer = if y + 1 < map.height {
-        Some(map.get(x, y + 1).tile_type.as_index() as f32)
-    } else {
-        None
-    };
+    let south_bottom_a_y = bse.min(se.y);
+    let south_bottom_b_y = bsw.min(sw.y);
+    let south_bottom_a = Vec3::new(x1, south_bottom_a_y, z1);
+    let south_bottom_b = Vec3::new(x0, south_bottom_b_y, z1);
     let south_bottom_info = south_bottom_layer.map(|layer| {
-        let bottom_a_y = bse.min(se.y);
-        let bottom_b_y = bsw.min(sw.y);
-        let bottom_height = bottom_a_y.max(bottom_b_y);
+        let bottom_height = south_bottom_a_y.max(south_bottom_b_y);
         [layer, bottom_height, 0.0, 0.0]
     });
+    let south_force_cliff = should_force_cliff_face(
+        tile_kind,
+        south_neighbor_kind,
+        se,
+        sw,
+        south_bottom_a,
+        south_bottom_b,
+    );
     buffer.add_side_face(
         se,
         sw,
-        Vec3::new(x1, bse.min(se.y), z1),
-        Vec3::new(x0, bsw.min(sw.y), z1),
+        south_bottom_a,
+        south_bottom_b,
         RampDirection::South,
         tile_layer,
         se.y.max(sw.y),
         south_bottom_info,
+        south_force_cliff,
     );
 
-    let (bnw, bsw) = if x > 0 {
-        let neighbor = corner_cache[map.idx(x - 1, y)];
-        (neighbor[CORNER_NE], neighbor[CORNER_SE])
+    let (bnw, bsw, west_neighbor_kind, west_bottom_layer) = if x > 0 {
+        let neighbor_idx = map.idx(x - 1, y);
+        let neighbor = corner_cache[neighbor_idx];
+        let neighbor_tile = map.get(x - 1, y);
+        (
+            neighbor[CORNER_NE],
+            neighbor[CORNER_SE],
+            Some(neighbor_tile.kind),
+            Some(neighbor_tile.tile_type.as_index() as f32),
+        )
     } else {
-        (0.0, 0.0)
+        (0.0, 0.0, None, None)
     };
-    let west_bottom_layer = if x > 0 {
-        Some(map.get(x - 1, y).tile_type.as_index() as f32)
-    } else {
-        None
-    };
+    let west_bottom_a_y = bsw.min(sw.y);
+    let west_bottom_b_y = bnw.min(nw.y);
+    let west_bottom_a = Vec3::new(x0, west_bottom_a_y, z1);
+    let west_bottom_b = Vec3::new(x0, west_bottom_b_y, z0);
     let west_bottom_info = west_bottom_layer.map(|layer| {
-        let bottom_a_y = bsw.min(sw.y);
-        let bottom_b_y = bnw.min(nw.y);
-        let bottom_height = bottom_a_y.max(bottom_b_y);
+        let bottom_height = west_bottom_a_y.max(west_bottom_b_y);
         [layer, bottom_height, 0.0, 0.0]
     });
+    let west_force_cliff = should_force_cliff_face(
+        tile_kind,
+        west_neighbor_kind,
+        sw,
+        nw,
+        west_bottom_a,
+        west_bottom_b,
+    );
     buffer.add_side_face(
         sw,
         nw,
-        Vec3::new(x0, bsw.min(sw.y), z1),
-        Vec3::new(x0, bnw.min(nw.y), z0),
+        west_bottom_a,
+        west_bottom_b,
         RampDirection::West,
         tile_layer,
         sw.y.max(nw.y),
         west_bottom_info,
+        west_force_cliff,
     );
 
-    let (bne, bse) = if x + 1 < map.width {
-        let neighbor = corner_cache[map.idx(x + 1, y)];
-        (neighbor[CORNER_NW], neighbor[CORNER_SW])
+    let (bne, bse, east_neighbor_kind, east_bottom_layer) = if x + 1 < map.width {
+        let neighbor_idx = map.idx(x + 1, y);
+        let neighbor = corner_cache[neighbor_idx];
+        let neighbor_tile = map.get(x + 1, y);
+        (
+            neighbor[CORNER_NW],
+            neighbor[CORNER_SW],
+            Some(neighbor_tile.kind),
+            Some(neighbor_tile.tile_type.as_index() as f32),
+        )
     } else {
-        (0.0, 0.0)
+        (0.0, 0.0, None, None)
     };
-    let east_bottom_layer = if x + 1 < map.width {
-        Some(map.get(x + 1, y).tile_type.as_index() as f32)
-    } else {
-        None
-    };
+    let east_bottom_a_y = bne.min(ne.y);
+    let east_bottom_b_y = bse.min(se.y);
+    let east_bottom_a = Vec3::new(x1, east_bottom_a_y, z0);
+    let east_bottom_b = Vec3::new(x1, east_bottom_b_y, z1);
     let east_bottom_info = east_bottom_layer.map(|layer| {
-        let bottom_a_y = bse.min(se.y);
-        let bottom_b_y = bne.min(ne.y);
-        let bottom_height = bottom_a_y.max(bottom_b_y);
+        let bottom_height = east_bottom_a_y.max(east_bottom_b_y);
         [layer, bottom_height, 0.0, 0.0]
     });
+    let east_force_cliff = should_force_cliff_face(
+        tile_kind,
+        east_neighbor_kind,
+        ne,
+        se,
+        east_bottom_a,
+        east_bottom_b,
+    );
     buffer.add_side_face(
         ne,
         se,
-        Vec3::new(x1, bne.min(ne.y), z0),
-        Vec3::new(x1, bse.min(se.y), z1),
+        east_bottom_a,
+        east_bottom_b,
         RampDirection::East,
         tile_layer,
         ne.y.max(se.y),
         east_bottom_info,
+        east_force_cliff,
     );
 }
 
@@ -358,6 +411,7 @@ impl MeshBuffers {
         tile_layer: Option<f32>,
         seam_height: f32,
         bottom_info: Option<[f32; 4]>,
+        force_cliff: bool,
     ) {
         add_side_face(
             &mut self.positions,
@@ -375,6 +429,7 @@ impl MeshBuffers {
             tile_layer,
             seam_height,
             bottom_info,
+            force_cliff,
         );
     }
 
@@ -527,6 +582,7 @@ fn add_side_face(
     tile_layer: Option<f32>,
     seam_height: f32,
     bottom_info: Option<[f32; 4]>,
+    force_cliff: bool,
 ) {
     const EPS: f32 = 1e-4;
     if (top_a.y - bottom_a.y).abs() < EPS && (top_b.y - bottom_b.y).abs() < EPS {
@@ -540,6 +596,13 @@ fn add_side_face(
         RampDirection::East => ([top_a, top_b, bottom_b, bottom_a], [[0.0, 0.0]; 4]),
     };
 
+    let mut color_info = bottom_info;
+    if let Some(info) = color_info.as_mut() {
+        info[2] = if force_cliff { 1.0 } else { 0.0 };
+    } else if force_cliff {
+        color_info = Some([-1.0, 0.0, 1.0, 0.0]);
+    }
+
     push_quad(
         positions,
         normals,
@@ -551,8 +614,27 @@ fn add_side_face(
         verts,
         tex,
         tile_layer.map(|layer| [layer, seam_height]),
-        bottom_info,
+        color_info,
     );
+}
+
+fn should_force_cliff_face(
+    tile_kind: TileKind,
+    neighbor_kind: Option<TileKind>,
+    top_a: Vec3,
+    top_b: Vec3,
+    bottom_a: Vec3,
+    bottom_b: Vec3,
+) -> bool {
+    const EPS: f32 = 1e-4;
+    if tile_kind != TileKind::Ramp && neighbor_kind != Some(TileKind::Ramp) {
+        return false;
+    }
+
+    let drop_a = top_a.y - bottom_a.y;
+    let drop_b = top_b.y - bottom_b.y;
+
+    drop_a > EPS || drop_b > EPS
 }
 
 pub mod splatmap {
