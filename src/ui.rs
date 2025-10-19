@@ -222,7 +222,7 @@ fn ui_panel(
             if let Some(path) = block_on(state.export_dialog_task.take().unwrap()) {
                 let export_path = ensure_extension(path, "tmemapdata");
                 match export::collect_texture_descriptors(&state.map, textures.as_ref()) {
-                    Ok(descriptors) => {
+                    Ok((descriptors, wall_descriptor)) => {
                         let map_clone = state.map.clone();
                         let export_name = infer_export_name(&state, &export_path);
                         let export_path_clone = export_path.clone();
@@ -245,6 +245,7 @@ fn ui_panel(
                                         map_clone,
                                         export_name,
                                         descriptors,
+                                        wall_descriptor,
                                         splat_png,
                                     )
                                     .map(|_| export_path_clone)

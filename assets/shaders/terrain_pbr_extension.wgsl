@@ -28,6 +28,10 @@ struct TerrainMaterialExtension {
     map_size: vec2<f32>,
     tile_size: f32,
     cliff_blend_height: f32,
+    wall_layer_index: u32,
+    wall_enabled: u32,
+    wall_has_normal: u32,
+    wall_has_roughness: u32,
     _padding: vec2<f32>,
 }
 
@@ -199,9 +203,6 @@ fn triplanar_sample_layer_scalar(
 #endif
 
 const MAX_TERRAIN_LAYERS: u32 = 4u;
-const CLIFF_ROCK_LAYER: u32 = 2u;
-// TODO: Replace with a dedicated sandstone cliff layer when the asset is available.
-const CLIFF_SANDSTONE_LAYER: u32 = 2u;
 
 fn assign_weight(weights: vec4<f32>, index: u32, value: f32) -> vec4<f32> {
     var result = weights;
@@ -253,26 +254,6 @@ fn clamp_layer_index(layer: i32, available_layers: u32) -> i32 {
     }
     let max_layer = i32(available_layers) - 1;
     return clamp(layer, 0, max_layer);
-}
-
-fn cliff_layer_for_tile(tile_type: u32) -> u32 {
-    switch tile_type {
-        case 0u: {
-            return CLIFF_ROCK_LAYER;
-        }
-        case 1u: {
-            return CLIFF_ROCK_LAYER;
-        }
-        case 2u: {
-            return CLIFF_ROCK_LAYER;
-        }
-        case 3u: {
-            return CLIFF_SANDSTONE_LAYER;
-        }
-        default: {
-            return CLIFF_ROCK_LAYER;
-        }
-    }
 }
 
 fn mask_float(condition: bool) -> f32 {
@@ -504,11 +485,6 @@ fn fragment(
         let fallback_source = 0.0;
 #endif
         let top_layer_index = clamp_layer_index(i32(round(fallback_source)), available_layers);
-        let top_layer = u32(top_layer_index);
-        let cliff_layer = clamp_layer_index(
-            i32(cliff_layer_for_tile(top_layer)),
-            available_layers,
-        );
         let seam_height = in.uv_b.y;
         let safe_blend = max(terrain_material_extension.cliff_blend_height, 0.0001);
         let top_delta = seam_height - pbr_input.world_position.y;
@@ -529,15 +505,36 @@ fn fragment(
 
         let cliff_weight = max(1.0 - top_blend - bottom_blend, 0.0);
 
+        let wall_enabled = terrain_material_extension.wall_enabled == 1u;
+        let wall_layer_index = i32(terrain_material_extension.wall_layer_index);
+#ifdef TERRAIN_MATERIAL_EXTENSION_NORMAL_ARRAY
+        let wall_has_normal_map = terrain_material_extension.wall_has_normal == 1u;
+#endif
+#ifdef TERRAIN_MATERIAL_EXTENSION_ROUGHNESS_ARRAY
+        let wall_has_roughness_map = terrain_material_extension.wall_has_roughness == 1u;
+#endif
+
 #ifdef TERRAIN_MATERIAL_EXTENSION_BASE_COLOR_ARRAY
-        let cliff_sample = triplanar_sample_layer(
-            terrain_base_color_array,
-            terrain_base_color_sampler,
-            pbr_input.world_position.xyz,
-            pbr_input.world_normal.xyz,
-            scale,
-            cliff_layer,
-        );
+        var cliff_sample: vec4<f32>;
+        if (wall_enabled) {
+            cliff_sample = triplanar_sample_layer(
+                terrain_base_color_array,
+                terrain_base_color_sampler,
+                pbr_input.world_position.xyz,
+                pbr_input.world_normal.xyz,
+                scale,
+                wall_layer_index,
+            );
+        } else {
+            cliff_sample = triplanar_sample_layer(
+                terrain_base_color_array,
+                terrain_base_color_sampler,
+                pbr_input.world_position.xyz,
+                pbr_input.world_normal.xyz,
+                scale,
+                top_layer_index,
+            );
+        }
         var color_accum = vec3<f32>(0.0);
         var color_weight = 0.0;
 
@@ -580,14 +577,26 @@ fn fragment(
 #endif
 
 #ifdef TERRAIN_MATERIAL_EXTENSION_NORMAL_ARRAY
-        let cliff_normal = triplanar_sample_layer_normal(
-            terrain_normal_array,
-            terrain_normal_sampler,
-            pbr_input.world_position.xyz,
-            pbr_input.world_normal.xyz,
-            scale,
-            cliff_layer,
-        );
+        var cliff_normal: vec3<f32>;
+        if (wall_enabled && wall_has_normal_map) {
+            cliff_normal = triplanar_sample_layer_normal(
+                terrain_normal_array,
+                terrain_normal_sampler,
+                pbr_input.world_position.xyz,
+                pbr_input.world_normal.xyz,
+                scale,
+                wall_layer_index,
+            );
+        } else {
+            cliff_normal = triplanar_sample_layer_normal(
+                terrain_normal_array,
+                terrain_normal_sampler,
+                pbr_input.world_position.xyz,
+                pbr_input.world_normal.xyz,
+                scale,
+                top_layer_index,
+            );
+        }
         var normal_accum = vec3<f32>(0.0);
         var normal_weight = 0.0;
 
@@ -633,14 +642,26 @@ fn fragment(
 #endif
 
 #ifdef TERRAIN_MATERIAL_EXTENSION_ROUGHNESS_ARRAY
-        let cliff_rough = triplanar_sample_layer_scalar(
-            terrain_roughness_array,
-            terrain_roughness_sampler,
-            pbr_input.world_position.xyz,
-            pbr_input.world_normal.xyz,
-            scale,
-            cliff_layer,
-        );
+        var cliff_rough: f32;
+        if (wall_enabled && wall_has_roughness_map) {
+            cliff_rough = triplanar_sample_layer_scalar(
+                terrain_roughness_array,
+                terrain_roughness_sampler,
+                pbr_input.world_position.xyz,
+                pbr_input.world_normal.xyz,
+                scale,
+                wall_layer_index,
+            );
+        } else {
+            cliff_rough = triplanar_sample_layer_scalar(
+                terrain_roughness_array,
+                terrain_roughness_sampler,
+                pbr_input.world_position.xyz,
+                pbr_input.world_normal.xyz,
+                scale,
+                top_layer_index,
+            );
+        }
         var roughness_accum = 0.0;
         var roughness_weight = 0.0;
 
