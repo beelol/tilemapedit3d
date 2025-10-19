@@ -478,16 +478,18 @@ fn fragment(
     }
 #endif
 
-    if (abs(pbr_input.world_normal.y) < 0.5 && available_layers > 0u) {
 #ifdef VERTEX_UVS_B
         let fallback_source = in.uv_b.x;
+        let seam_height = in.uv_b.y;
 #else
         let fallback_source = 0.0;
+        let seam_height = pbr_input.world_position.y;
 #endif
+    let top_delta = seam_height - pbr_input.world_position.y;
+
+    if (available_layers > 0u && (abs(pbr_input.world_normal.y) < 0.5 || top_delta > 0.001)) {
         let top_layer_index = clamp_layer_index(i32(round(fallback_source)), available_layers);
-        let seam_height = in.uv_b.y;
         let safe_blend = max(terrain_material_extension.cliff_blend_height, 0.0001);
-        let top_delta = seam_height - pbr_input.world_position.y;
         let top_blend = clamp(1.0 - (top_delta / safe_blend), 0.0, 1.0);
 
         var bottom_blend = 0.0;
