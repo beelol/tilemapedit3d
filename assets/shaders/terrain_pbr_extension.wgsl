@@ -27,6 +27,8 @@ struct TerrainMaterialExtension {
     layer_count: u32,
     map_size: vec2<f32>,
     tile_size: f32,
+    height_uv_scale: f32,
+    height_world_scale: f32,
     cliff_blend_height: f32,
     wall_layer_index: u32,
     wall_enabled: u32,
@@ -76,10 +78,12 @@ fn triplanar_sample(
     let n = normalize(norm);
     let weights = abs(n) / (abs(n.x) + abs(n.y) + abs(n.z));
 
+    let adjusted_y = pos.y * terrain_material_extension.height_uv_scale;
+
     // Wrap each projection into [0,1)
-    let uv_x = fract(pos.yz * scale);
+    let uv_x = fract(vec2<f32>(adjusted_y, pos.z) * scale);
     let uv_y = fract(pos.xz * scale);
-    let uv_z = fract(pos.xy * scale);
+    let uv_z = fract(vec2<f32>(pos.x, adjusted_y) * scale);
 
     let x_tex = textureSample(tex, samp, uv_x);
     let y_tex = textureSample(tex, samp, uv_y);
@@ -100,9 +104,11 @@ fn triplanar_sample_layer(
     let n = normalize(norm);
     let weights = abs(n) / (abs(n.x) + abs(n.y) + abs(n.z));
 
-    let uv_x = fract(pos.yz * scale);
+    let adjusted_y = pos.y * terrain_material_extension.height_uv_scale;
+
+    let uv_x = fract(vec2<f32>(adjusted_y, pos.z) * scale);
     let uv_y = fract(pos.xz * scale);
-    let uv_z = fract(pos.xy * scale);
+    let uv_z = fract(vec2<f32>(pos.x, adjusted_y) * scale);
 
 //    let layer_f = f32(layer);
 //    let x_tex = textureSample(tex, samp, vec3<f32>(uv_x, layer_f));
@@ -129,9 +135,11 @@ fn triplanar_sample_layer_normal(
     let n = normalize(norm);
     let weights = abs(n) / (abs(n.x) + abs(n.y) + abs(n.z));
 
-    let uv_x = fract(pos.yz * scale);
+    let adjusted_y = pos.y * terrain_material_extension.height_uv_scale;
+
+    let uv_x = fract(vec2<f32>(adjusted_y, pos.z) * scale);
     let uv_y = fract(pos.xz * scale);
-    let uv_z = fract(pos.xy * scale);
+    let uv_z = fract(vec2<f32>(pos.x, adjusted_y) * scale);
 
     let sample_x = textureSample(tex, samp, uv_x, layer).xyz * 2.0 - vec3<f32>(1.0);
     let sample_y = textureSample(tex, samp, uv_y, layer).xyz * 2.0 - vec3<f32>(1.0);
@@ -190,9 +198,11 @@ fn triplanar_sample_layer_scalar(
     let n = normalize(norm);
     let weights = abs(n) / (abs(n.x) + abs(n.y) + abs(n.z));
 
-    let uv_x = fract(pos.yz * scale);
+    let adjusted_y = pos.y * terrain_material_extension.height_uv_scale;
+
+    let uv_x = fract(vec2<f32>(adjusted_y, pos.z) * scale);
     let uv_y = fract(pos.xz * scale);
-    let uv_z = fract(pos.xy * scale);
+    let uv_z = fract(vec2<f32>(pos.x, adjusted_y) * scale);
 
     let sample_x = textureSample(tex, samp, uv_x, layer).g;
     let sample_y = textureSample(tex, samp, uv_y, layer).g;
@@ -485,7 +495,7 @@ fn fragment(
         let fallback_source = 0.0;
 #endif
         let top_layer_index = clamp_layer_index(i32(round(fallback_source)), available_layers);
-        let seam_height = in.uv_b.y;
+        let seam_height = in.uv_b.y * terrain_material_extension.height_world_scale;
         let safe_blend = max(terrain_material_extension.cliff_blend_height, 0.0001);
         let top_delta = seam_height - pbr_input.world_position.y;
         var top_blend = clamp(1.0 - (top_delta / safe_blend), 0.0, 1.0);
@@ -501,7 +511,8 @@ fn fragment(
         if (in.color.r >= 0.0) {
             let candidate = clamp_layer_index(i32(round(in.color.r)), available_layers);
             bottom_layer_index = candidate;
-            let bottom_delta = pbr_input.world_position.y - in.color.g;
+            let bottom_height = in.color.g * terrain_material_extension.height_world_scale;
+            let bottom_delta = pbr_input.world_position.y - bottom_height;
             bottom_blend = clamp(1.0 - (bottom_delta / safe_blend), 0.0, 1.0);
             has_bottom = true;
         }
