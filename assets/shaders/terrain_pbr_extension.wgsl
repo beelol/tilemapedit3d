@@ -23,7 +23,7 @@
 #endif
 
 struct TerrainMaterialExtension {
-    uv_scale: f32,
+    uv_scale: vec2<f32>,
     layer_count: u32,
     map_size: vec2<f32>,
     tile_size: f32,
@@ -304,7 +304,7 @@ fn fragment(
     var pbr_input = pbr_input_from_standard_material(in, is_front);
 
     // Choose projection by dominant world normal axis
-    let scale = terrain_material_extension.uv_scale;
+    let scale = terrain_material_extension.uv_scale.x;
     var base_color = vec4<f32>(pbr_input.material.base_color.rgb, 1.0);
 
 #ifdef STANDARD_MATERIAL_BASE_COLOR_TEXTURE
@@ -528,6 +528,7 @@ fn fragment(
 
         let wall_enabled = terrain_material_extension.wall_enabled == 1u;
         let wall_layer_index = i32(terrain_material_extension.wall_layer_index);
+        let wall_vertical_scale = terrain_material_extension.uv_scale.y;
 #ifdef TERRAIN_MATERIAL_EXTENSION_NORMAL_ARRAY
         let wall_has_normal_map = terrain_material_extension.wall_has_normal == 1u;
 #endif
@@ -538,10 +539,15 @@ fn fragment(
 #ifdef TERRAIN_MATERIAL_EXTENSION_BASE_COLOR_ARRAY
         var cliff_sample: vec4<f32>;
         if (wall_enabled) {
+            let wall_position = vec3<f32>(
+                pbr_input.world_position.x,
+                pbr_input.world_position.y * wall_vertical_scale,
+                pbr_input.world_position.z,
+            );
             cliff_sample = triplanar_sample_layer(
                 terrain_base_color_array,
                 terrain_base_color_sampler,
-                pbr_input.world_position.xyz,
+                wall_position,
                 pbr_input.world_normal.xyz,
                 scale,
                 wall_layer_index,
@@ -600,10 +606,15 @@ fn fragment(
 #ifdef TERRAIN_MATERIAL_EXTENSION_NORMAL_ARRAY
         var cliff_normal: vec3<f32>;
         if (wall_enabled && wall_has_normal_map) {
+            let wall_position = vec3<f32>(
+                pbr_input.world_position.x,
+                pbr_input.world_position.y * wall_vertical_scale,
+                pbr_input.world_position.z,
+            );
             cliff_normal = triplanar_sample_layer_normal(
                 terrain_normal_array,
                 terrain_normal_sampler,
-                pbr_input.world_position.xyz,
+                wall_position,
                 pbr_input.world_normal.xyz,
                 scale,
                 wall_layer_index,
@@ -665,10 +676,15 @@ fn fragment(
 #ifdef TERRAIN_MATERIAL_EXTENSION_ROUGHNESS_ARRAY
         var cliff_rough: f32;
         if (wall_enabled && wall_has_roughness_map) {
+            let wall_position = vec3<f32>(
+                pbr_input.world_position.x,
+                pbr_input.world_position.y * wall_vertical_scale,
+                pbr_input.world_position.z,
+            );
             cliff_rough = triplanar_sample_layer_scalar(
                 terrain_roughness_array,
                 terrain_roughness_sampler,
-                pbr_input.world_position.xyz,
+                wall_position,
                 pbr_input.world_normal.xyz,
                 scale,
                 wall_layer_index,
@@ -774,7 +790,7 @@ fn fragment(
         terrain_base_color_sampler,
         pbr_input.world_position.xyz,
         pbr_input.world_normal.xyz,
-        terrain_material_extension.uv_scale,
+        terrain_material_extension.uv_scale.x,
         3   // test the rock layer index
     );
     out.color = vec4<f32>(test.rgb, 1.0);
@@ -796,7 +812,7 @@ if (terrain_material_extension.layer_count > 0u) {
         terrain_roughness_sampler,
         pbr_input.world_position.xyz,
         pbr_input.world_normal.xyz,
-        terrain_material_extension.uv_scale,
+        terrain_material_extension.uv_scale.x,
         layer_value,
     );
 
