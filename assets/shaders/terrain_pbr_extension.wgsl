@@ -28,6 +28,10 @@ struct TerrainMaterialExtension {
     map_size: vec2<f32>,
     tile_size: f32,
     cliff_blend_height: f32,
+    wall_layer_index: u32,
+    wall_enabled: u32,
+    wall_has_normal: u32,
+    wall_has_roughness: u32,
     _padding: vec2<f32>,
 }
 
