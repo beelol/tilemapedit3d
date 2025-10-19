@@ -9,6 +9,10 @@ use image::codecs::png::PngEncoder;
 use image::{ColorType, ExtendedColorType, ImageEncoder};
 use serde::Serialize;
 use serde_json::json;
+
+use crate::texture::metadata::{
+    TerrainMetadata, TerrainTextureMetadataEntry, TerrainWallTextureMetadata,
+};
 use zip::CompressionMethod;
 use zip::write::FileOptions;
 
@@ -42,42 +46,6 @@ pub struct WallTextureExportDescriptor {
     pub diffuse: TextureFileDescriptor,
     pub normal: Option<TextureFileDescriptor>,
     pub roughness: Option<TextureFileDescriptor>,
-}
-
-#[derive(Serialize)]
-struct MetadataTextureEntry {
-    id: String,
-    diffuse: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    normal: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    roughness: Option<String>,
-    splatmap_channel: usize,
-}
-
-#[derive(Serialize)]
-struct MetadataWallTexture {
-    id: String,
-    diffuse: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    normal: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    roughness: Option<String>,
-}
-
-#[derive(Serialize)]
-struct ExportMetadata {
-    name: String,
-    width: u32,
-    height: u32,
-    tile_size: f32,
-    textures: Vec<MetadataTextureEntry>,
-    splatmap: String,
-    mesh: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tilemap: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    wall_texture: Option<MetadataWallTexture>,
 }
 
 pub fn collect_texture_descriptors(
@@ -187,7 +155,7 @@ pub fn export_package(
 
     let (metadata, texture_files, wall_texture_metadata) =
         build_metadata_and_files(&textures, wall_texture)?;
-    let metadata = ExportMetadata {
+    let metadata = TerrainMetadata {
         name: map_name,
         width: map.width,
         height: map.height,
@@ -234,9 +202,9 @@ fn build_metadata_and_files(
     textures: &[TextureExportDescriptor],
     wall_texture: Option<WallTextureExportDescriptor>,
 ) -> Result<(
-    Vec<MetadataTextureEntry>,
+    Vec<TerrainTextureMetadataEntry>,
     Vec<(String, Vec<u8>)>,
-    Option<MetadataWallTexture>,
+    Option<TerrainWallTextureMetadata>,
 )> {
     let mut metadata = Vec::new();
     let mut files = Vec::new();
@@ -263,7 +231,7 @@ fn build_metadata_and_files(
             &mut files,
         )?;
 
-        metadata.push(MetadataTextureEntry {
+        metadata.push(TerrainTextureMetadataEntry {
             id: descriptor.identifier.clone(),
             diffuse: diffuse_path,
             normal: normal_path,
@@ -294,7 +262,7 @@ fn build_metadata_and_files(
                 &mut files,
             )?;
 
-            Some(MetadataWallTexture {
+            Some(TerrainWallTextureMetadata {
                 id: descriptor.identifier,
                 diffuse,
                 normal,

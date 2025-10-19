@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
@@ -7,6 +7,8 @@ use bevy::render::render_resource::{TextureDimension, TextureFormat};
 use crate::types::TileType;
 
 use super::material::{self, TerrainMaterial, TerrainMaterialHandles};
+use super::metadata::TerrainMetadata;
+use anyhow::anyhow;
 
 #[derive(Debug, Clone)]
 pub struct TerrainTextureEntry {
@@ -73,6 +75,67 @@ impl TerrainTextureRegistry {
         self.wall_layer_index = None;
         self.wall_normal_available = false;
         self.wall_roughness_available = false;
+    }
+
+    pub fn load_from_metadata(
+        &mut self,
+        metadata: &TerrainMetadata,
+        asset_server: &AssetServer,
+        materials: &mut Assets<TerrainMaterial>,
+    ) -> anyhow::Result<()> {
+        self.entries.clear();
+        self.lookup.clear();
+        self.base_color_array = None;
+        self.normal_array = None;
+        self.roughness_array = None;
+        self.wall_texture = None;
+        self.wall_layer_index = None;
+        self.wall_normal_available = false;
+        self.wall_roughness_available = false;
+
+        let mut seen: HashSet<TileType> = HashSet::new();
+        for texture in &metadata.textures {
+            let tile_type = TileType::from_identifier(&texture.id)
+                .or_else(|| TileType::from_index(texture.splatmap_channel))
+                .ok_or_else(|| {
+                    anyhow!(
+                        "Unknown tile texture identifier '{}' (channel {})",
+                        texture.id,
+                        texture.splatmap_channel
+                    )
+                })?;
+
+            if !seen.insert(tile_type) {
+                return Err(anyhow!(
+                    "Duplicate texture definition for tile type {:?}",
+                    tile_type
+                ));
+            }
+
+            self.load_and_register(
+                tile_type,
+                texture.id.clone(),
+                asset_server,
+                materials,
+                &texture.diffuse,
+                texture.normal.as_deref(),
+                texture.roughness.as_deref(),
+                None,
+            );
+        }
+
+        if let Some(wall) = metadata.wall_texture.as_ref() {
+            self.load_and_register_wall(
+                &wall.id,
+                wall.id.clone(),
+                asset_server,
+                &wall.diffuse,
+                wall.normal.as_deref(),
+                wall.roughness.as_deref(),
+            );
+        }
+
+        Ok(())
     }
 
     pub fn load_and_register(

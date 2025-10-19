@@ -68,6 +68,26 @@ impl TileType {
         }
     }
 
+    pub fn from_index(index: usize) -> Option<Self> {
+        match index {
+            0 => Some(TileType::Grass),
+            1 => Some(TileType::Dirt),
+            2 => Some(TileType::Sand),
+            3 => Some(TileType::Rock),
+            _ => None,
+        }
+    }
+
+    pub fn from_identifier(identifier: &str) -> Option<Self> {
+        match identifier.to_ascii_lowercase().as_str() {
+            "grass" => Some(TileType::Grass),
+            "dirt" => Some(TileType::Dirt),
+            "sand" | "cliff" => Some(TileType::Sand),
+            "rock" => Some(TileType::Rock),
+            _ => None,
+        }
+    }
+
     pub fn identifier(self) -> &'static str {
         match self {
             TileType::Grass => "grass",

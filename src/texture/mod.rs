@@ -2,6 +2,7 @@ use bevy::pbr::MaterialPlugin;
 use bevy::prelude::*;
 
 pub mod material;
+pub mod metadata;
 pub mod registry;
 
 pub struct TexturePlugin;
