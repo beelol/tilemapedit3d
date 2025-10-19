@@ -321,10 +321,10 @@ fn append_tile_geometry(
 }
 
 fn side_tile_layer(
-    map: &TileMap,
-    x: u32,
-    y: u32,
-    direction: RampDirection,
+    _map: &TileMap,
+    _x: u32,
+    _y: u32,
+    _direction: RampDirection,
     default_layer: Option<f32>,
     top_a: Vec3,
     top_b: Vec3,
@@ -339,36 +339,12 @@ fn side_tile_layer(
         return default_layer;
     }
 
-    if should_force_cliff(map, x, y, direction) {
-        Some(TileType::Cliff.as_index() as f32)
-    } else {
-        default_layer
-    }
+    default_layer
 }
 
 fn has_vertical_face(top_a: Vec3, top_b: Vec3, bottom_a: Vec3, bottom_b: Vec3) -> bool {
     const EPS: f32 = 1e-4;
     (top_a.y - bottom_a.y).abs() > EPS || (top_b.y - bottom_b.y).abs() > EPS
-}
-
-fn should_force_cliff(map: &TileMap, x: u32, y: u32, direction: RampDirection) -> bool {
-    if map.get(x, y).kind == TileKind::Ramp {
-        return true;
-    }
-
-    let (dx, dy) = direction.offset();
-    let nx = x as i32 + dx;
-    let ny = y as i32 + dy;
-    if nx < 0 || ny < 0 {
-        return false;
-    }
-
-    let (ux, uy) = (nx as u32, ny as u32);
-    if ux >= map.width || uy >= map.height {
-        return false;
-    }
-
-    map.get(ux, uy).kind == TileKind::Ramp
 }
 
 fn find_ramp_target(map: &TileMap, x: u32, y: u32, base: f32) -> Option<(RampDirection, f32)> {
