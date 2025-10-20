@@ -30,12 +30,27 @@ fn default_uv_scale() -> f32 {
     1.0 / (TILE_SIZE * TILE_REPEAT)
 }
 
+fn default_height_uv_scale() -> f32 {
+    // Terrain vertices already encode their scaled world-space heights, so no
+    // additional adjustment is needed when sampling triplanar textures.
+    1.0
+}
+
+fn default_height_world_scale() -> f32 {
+    // Seam and bottom heights stored in the mesh are expressed in world units.
+    // Keeping this value at 1.0 preserves the editor's existing appearance
+    // while satisfying the shader's expectations.
+    1.0
+}
+
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct TerrainMaterialParams {
     pub uv_scale: f32,
     pub layer_count: u32,
     pub map_size: Vec2,
     pub tile_size: f32,
+    pub height_uv_scale: f32,
+    pub height_world_scale: f32,
     pub cliff_blend_height: f32,
     pub wall_layer_index: u32,
     pub wall_enabled: u32,
@@ -52,6 +67,8 @@ impl Default for TerrainMaterialParams {
             layer_count: 0,
             map_size: Vec2::splat(1.0),
             tile_size: TILE_SIZE,
+            height_uv_scale: default_height_uv_scale(),
+            height_world_scale: default_height_world_scale(),
             cliff_blend_height: 0.2,
             wall_layer_index: u32::MAX,
             wall_enabled: 0,
