@@ -26,7 +26,7 @@ pub struct TerrainMaterialHandles {
 
 const TILE_REPEAT: f32 = 4.0;
 
-fn default_uv_scale() -> Vec2 {
+pub(crate) fn terrain_base_uv_scale() -> Vec2 {
     Vec2::new(1.0 / (TILE_SIZE * TILE_REPEAT), 1.0)
 }
 
@@ -48,7 +48,7 @@ pub struct TerrainMaterialParams {
 impl Default for TerrainMaterialParams {
     fn default() -> Self {
         Self {
-            uv_scale: default_uv_scale(),
+            uv_scale: terrain_base_uv_scale(),
             layer_count: 0,
             map_size: Vec2::splat(1.0),
             tile_size: TILE_SIZE,

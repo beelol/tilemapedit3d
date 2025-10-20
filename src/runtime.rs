@@ -296,6 +296,7 @@ fn update_runtime_material(
 
     material.extension.params.map_size = Vec2::new(splat.size.x as f32, splat.size.y as f32);
     material.extension.params.tile_size = TILE_SIZE;
+    material.extension.params.uv_scale = material::terrain_base_uv_scale();
     material.extension.params.cliff_blend_height = 0.2;
     material.extension.params.wall_enabled = arrays.wall_layer_index.map(|_| 1u32).unwrap_or(0);
     material.extension.params.wall_layer_index = arrays.wall_layer_index.unwrap_or(u32::MAX);
