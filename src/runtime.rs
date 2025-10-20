@@ -296,6 +296,10 @@ fn update_runtime_material(
 
     material.extension.params.map_size = Vec2::new(splat.size.x as f32, splat.size.y as f32);
     material.extension.params.tile_size = TILE_SIZE;
+    // The editor mesh already bakes the desired world-space scaling into the
+    // vertex data, so the shader inputs remain at a neutral scale.
+    material.extension.params.height_uv_scale = 1.0;
+    material.extension.params.height_world_scale = 1.0;
     material.extension.params.cliff_blend_height = 0.2;
     material.extension.params.wall_enabled = arrays.wall_layer_index.map(|_| 1u32).unwrap_or(0);
     material.extension.params.wall_layer_index = arrays.wall_layer_index.unwrap_or(u32::MAX);
