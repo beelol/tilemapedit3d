@@ -26,13 +26,13 @@ pub struct TerrainMaterialHandles {
 
 const TILE_REPEAT: f32 = 4.0;
 
-pub(crate) fn terrain_base_uv_scale() -> Vec2 {
-    Vec2::new(1.0 / (TILE_SIZE * TILE_REPEAT), 1.0)
+pub(crate) fn terrain_base_uv_scale() -> f32 {
+    1.0 / (TILE_SIZE * TILE_REPEAT)
 }
 
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct TerrainMaterialParams {
-    pub uv_scale: Vec2,
+    pub uv_scale: f32,
     pub layer_count: u32,
     pub map_size: Vec2,
     pub tile_size: f32,
