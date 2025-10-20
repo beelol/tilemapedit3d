@@ -294,6 +294,10 @@ fn update_runtime_material(
         material.extension.splat_map = Some(splat.handle.clone());
     }
 
+    let base_uv_scale = material.extension.params.uv_scale;
+    material.extension.params.uv_scale = base_uv_scale;
+    material.extension.params.height_uv_scale = base_uv_scale;
+    material.extension.params.height_world_scale = 1.0;
     material.extension.params.map_size = Vec2::new(splat.size.x as f32, splat.size.y as f32);
     material.extension.params.tile_size = TILE_SIZE;
     material.extension.params.cliff_blend_height = 0.2;

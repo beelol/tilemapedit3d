@@ -32,10 +32,13 @@ fn default_uv_scale() -> f32 {
 
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct TerrainMaterialParams {
+    /// Controls the tiling frequency for horizontal surfaces.
     pub uv_scale: f32,
     pub layer_count: u32,
     pub map_size: Vec2,
     pub tile_size: f32,
+    pub height_uv_scale: f32,
+    pub height_world_scale: f32,
     pub cliff_blend_height: f32,
     pub wall_layer_index: u32,
     pub wall_enabled: u32,
@@ -47,11 +50,14 @@ pub struct TerrainMaterialParams {
 
 impl Default for TerrainMaterialParams {
     fn default() -> Self {
+        let uv_scale = default_uv_scale();
         Self {
-            uv_scale: default_uv_scale(),
+            uv_scale,
             layer_count: 0,
             map_size: Vec2::splat(1.0),
             tile_size: TILE_SIZE,
+            height_uv_scale: uv_scale,
+            height_world_scale: 1.0,
             cliff_blend_height: 0.2,
             wall_layer_index: u32::MAX,
             wall_enabled: 0,
